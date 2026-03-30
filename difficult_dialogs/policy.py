@@ -1,687 +1,684 @@
+"""Policy module - controls dialog flow and user interaction.
+
+Policies decide how conversations progress through an argument's premises.
 """
-A policy is a way to run an argument
+from __future__ import annotations
 
-Policies decide how the conversation will go
-
-You can make your own policies by overriding key methods, or you can
-use the default policies
-
-see [example of DummyPolicy](https://github.com/JarbasAl/difficult_dialogs/blob/master/examples/dummy_policy.py)
-
-- argument.intro is spoken on start, it is meant to introduce the argument
-
-- a .premise file will be picked randomly and read
-
-- all statements inside a .premise file will be read, but in a random order
-
-- no statements will be repeated
-
-- when all statements inside a .premise file are read, another .premise
-file will be picked
-
-- when all .premise files are read, argument.conclusion is printed fully,
-it is meant to deliver the conclusion we want to reach
-
-```python
-from os.path import join, dirname
-
-from difficult_dialogs.arguments import Argument
-from difficult_dialogs.policy import KnowItAllPolicy, BasePolicy
-
-arg_folder = join(dirname(__file__), "i_think_therefore_i_am")
-arg = Argument(path=arg_folder)
-
-# ignore user input, just go trough all premises
-# dialog = BasePolicy(argument=arg)
-
-# defend when user disagrees
-dialog = KnowItAllPolicy(arg)
-
-
-# argument / user loop
-dialog.run_async()
-
-while True:
-    try:
-        if dialog.output:
-            print("BOT: " + dialog.output)
-            if not dialog.finished:
-                utterance = input("USER: ")
-                dialog.submit_input(utterance)
-            else:
-                break
-    except KeyboardInterrupt:
-        dialog.finished = True
-        break
-
-dialog.stop()
-```
-
-You also have access to lower level details, policies can be used without the run() loop
-
-```python
-from os.path import join, dirname
-
-from difficult_dialogs.arguments import Argument
-from difficult_dialogs.policy import BasePolicy
-
-arg_folder = join(dirname(__file__), "argument_template")
-arg = Argument(path=arg_folder)
-dialog = BasePolicy(argument=arg)
-
-# argument manual control
-print(dialog.start())
-while not dialog.finished:
-    assertion = dialog.choose_premise()
-    if assertion:
-        print(assertion)
-        for s in assertion.statements:
-            print(s)
-        print(assertion.sources)
-    else:
-        print(dialog.end())
-```
-"""
-
+import asyncio
 import random
-from time import sleep
-from threading import Thread
-from logging import getLogger
-from typing import Optional, Union
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, AsyncGenerator, Generator
 
-log = getLogger("DialogRunner")
+if TYPE_CHECKING:
+    from difficult_dialogs.arguments import Argument
 
 
-class BasePolicy:
-    """Template Policy that implements minimal functionality to run an argument."""
+@dataclass
+class PolicyState:
+    """Tracks the current state of a dialog session."""
+    spoken_premises: set[str] = field(default_factory=set)
+    spoken_statements: set[str] = field(default_factory=set)
+    current_premise: str | None = None
+    user_agrees: bool = True
+    finished: bool = False
 
-    def __init__(self, name: str = "base", argument: Optional[object] = None) -> None:
-        """
 
+class BasePolicy(ABC):
+    """Abstract base class for dialog policies.
+    
+    Policies control how an argument is presented to the user.
+    Subclasses must implement handle_input() to process user responses.
+    
+    Attributes:
+        argument: The argument being presented.
+        state: Current dialog state.
+    """
+    
+    def __init__(self, argument: Argument) -> None:
+        """Initialize policy with an argument.
+        
         Args:
-            name:
-            argument:
-        """
-        self.name = name
-        self.current_statement = None
-        self.current_premise = None
-        self._cache = []
-        self.last_dialog = None
-        self.finished = False
-        self._in_agreement = True
-        self.argument = argument
-        self._output = ""
-        self._input = ""
-        self._async_thread = None
-        self._skip_feedback = False
-        self._last_prompt = ""
-
-    # lib
-    def bind(self, argument):
-        """
-
-        Args:
-            argument:
+            argument: Argument instance to present.
         """
         self.argument = argument
-        self.argument.load()
-
-    def reset(self):
-        """
-
-        """
-        self._in_agreement = True
-        self.current_premise = None
-        self.current_statement = None
-        self._cache = []
-        self.last_dialog = None
-        self.finished = False
-
-    def speak(self, text):
-        """
-        - normalize text
-        - cache response, self._cache_this(text)
-        - manage output, self._output += text
-        - return normalized text
-
-         """
-        text = str(text).strip()
-        self._cache_this(text)
-        if self._output and not self._output.endswith("\n"):
-            self._output += "\n"
-        self._output += text
-        return text
-
-    def is_cached(self, entry):
-        """
-        check if entry was used already
-
+        self.state = PolicyState()
+        self._output_queue: list[str] = []
+    
+    @abstractmethod
+    def handle_input(self, user_input: str) -> str | None:
+        """Process user input and return bot response.
+        
         Args:
-            entry: text or Statement
-
-        Returns: is_cached (bool)
-
+            user_input: Text input from user.
+            
+        Returns:
+            Response text, or None to wait for more input.
         """
-        entry = str(entry).strip()
-        return entry in self.already_spoken
-
-    def _cache_this(self, entry):
+        pass
+    
+    def start(self) -> str:
+        """Start the dialog and return intro statement.
+        
+        Returns:
+            Intro statement text.
         """
-
-        Args:
-            entry:
+        self.state = PolicyState()
+        return str(self.argument.intro)
+    
+    def end(self) -> str:
+        """End the dialog and return conclusion.
+        
+        Returns:
+            Conclusion statement text.
         """
-        entry = str(entry).strip()
-        self._cache.append(entry)
-
-    def _clean_prompt(self, prompt):
+        self.state.finished = True
+        return str(self.argument.conclusion)
+    
+    def _get_next_statement(self) -> tuple[str, str] | None:
+        """Get the next statement to present.
+        
+        Returns:
+            Tuple of (premise_name, statement_text), or None if complete.
         """
-
-        Args:
-            prompt:
+        
+        # Try current premise first
+        if self.state.current_premise:
+            premise = self.argument.get_premise(self.state.current_premise)
+            if premise:
+                stmt = premise.get_next_statement(self.state.spoken_statements)
+                if stmt:
+                    self.state.spoken_statements.add(stmt.text)
+                    return (self.state.current_premise, stmt.text)
+        
+        # Move to next premise
+        premise = self.argument.get_next_premise(self.state.spoken_premises)
+        if premise:
+            self.state.current_premise = premise.name
+            self.state.spoken_premises.add(premise.name)
+            stmt = premise.get_next_statement(self.state.spoken_statements)
+            if stmt:
+                self.state.spoken_statements.add(stmt.text)
+                return (premise.name, stmt.text)
+        
+        # No more statements
+        return None
+    
+    def _get_support(self) -> str | None:
+        """Get support statement for current premise.
+        
+        Returns:
+            Support text, or None if exhausted.
+        """
+        if not self.state.current_premise:
+            return None
+        
+        premise = self.argument.get_premise(self.state.current_premise)
+        if not premise:
+            return None
+        
+        support = premise.get_support(self.state.spoken_statements)
+        if support:
+            self.state.spoken_statements.add(support)
+        return str(support) if support else None
+    
+    def _get_sources(self) -> list[str]:
+        """Get sources for current premise.
 
         Returns:
-
+            List of source URLs/citations.
         """
-        prompt = prompt or "Do you agree with {{statement}} ?"
-        if isinstance(prompt, list):
-            prompt = random.choice(prompt)
-        if self.current_statement is not None:
-            current_statement = self.current_statement.text.strip()
-        else:
-            current_statement = "what i just said"
-        prompt = prompt \
-            .replace("{{statement}}", current_statement) \
-            .replace("{statement}", current_statement) \
-            .replace("{{ statement }}", current_statement) \
-            .replace("{ statement }", current_statement)
-        return prompt + " "
+        if not self.state.current_premise:
+            return []
 
-    # dialog data
-    @property
-    def user_agrees(self):
-        """
-        Does the user agree with the argument
+        premise = self.argument.get_premise(self.state.current_premise)
+        if not premise:
+            return []
 
-        Returns: in_agreement (bool)
+        return list(premise.sources)
 
-        """
-        return self._in_agreement
+    def _check_five_w(self, user_input: str) -> str | None:
+        """Check whether user input contains a Five-Ws question and return an answer.
 
-    @property
-    def already_spoken(self):
-        """
-
-        Returns: already spoken responses (list)
-
-        """
-        return self._cache
-
-    @property
-    def output(self):
-        """
-
-        Returns: current bot dialog (str)
-
-        """
-        return self._output
-
-    @property
-    def intro_statement(self):
-        """
-
-        Returns: argument introduction (str)
-
-        """
-        if self.argument is not None:
-            return str(self.argument.intro_statement)
-        return ""
-
-    @property
-    def conclusion_statement(self):
-        """
-
-        Returns: argument conclusion (str)
-
-        """
-        if self.argument is not None:
-            return self.argument.conclusion_statement
-        return ""
-
-    @property
-    def premises(self):
-        """
-
-        Returns: all premises of this argument (list)
-
-        """
-        if self.argument is not None:
-            return self.argument.premises
-        return []
-
-    # dialog actions
-    def start(self):
-        """ prepare context of dialog
-
-        - reset policy, self.reset()
-        - set running flag, self.finished = False
-        - speak intro statement
-
-        Returns: intro statement (str)
-
-        """
-        self.reset()
-        self.finished = False
-        return self.speak(self.intro_statement)
-
-    def end(self):
-        """ handle outcome of dialog
-
-        - unset running flag, self.finished = True
-        - return speak conclusion statement
-
-        Returns: conclusion statement (str)
-
-        """
-        self.finished = True
-        return self.speak(self.conclusion_statement)
-
-    def choose_premise(self, argument=None):
-        """
-        select which Premise to tackle next
-
-        Returns: next premise (Premise)
-        """
-        argument = argument or self.argument
-        choices = [t for t in argument.premises
-                   if not self.is_cached(t)]
-        if not len(choices):
-            return None
-        assertion = random.choice(choices)
-        self._cache_this(assertion)  # remember assertion
-        return assertion
-
-    def choose_next_statement(self, premise=None):
-        """
-        select which Statement to tackle next
-
-        Returns: next statement (Statement)
-        """
-        premise = premise or self.current_premise
-        choices = [t for t in premise.statements
-                   if not self.is_cached(t)]
-        if not len(choices):
-            # go to next premise
-            next_assertion = self.choose_premise()
-            if next_assertion is None:
-                self.finished = True
-                return None  # no statements left
-            self.current_premise = next_assertion
-            return self.choose_next_statement()
-
-        statement = random.choice(choices)
-        self.current_statement = statement
-        return statement
-
-    def agree(self):
-        """
-        Agree with current premise
-        """
-        self._in_agreement = True
-
-    def disagree(self):
-        """
-        Disagree with current premise
-        """
-        self._in_agreement = False
-
-    def what(self, default_answer="i don't know how to explain"):
-        """ explain current statement """
-        answer = default_answer
-        choices = [t for t in self.current_premise.what
-                   if not self.is_cached(t)]
-        if len(choices):
-            answer = random.choice(choices)
-        return self.speak(answer)
-
-    def why(self, default_answer="i don't know why"):
-        """ explain cause of current statement """
-        answer = default_answer
-        choices = [t for t in self.current_premise.why
-                   if not self.is_cached(t)]
-        if len(choices):
-            answer = choices[0]
-
-        return self.speak(answer)
-
-    def how(self, default_answer="i don't know how"):
-        """ explain how current statement """
-        answer = default_answer
-        choices = [t for t in self.current_premise.how
-                   if not self.is_cached(t)]
-        if len(choices):
-            answer = random.choice(choices)
-
-        return self.speak(answer)
-
-    def when(self, default_answer="i don't know when"):
-        """ explain when current statement happened """
-        answer = default_answer
-        choices = [t for t in self.current_premise.when
-                   if not self.is_cached(t)]
-        if len(choices):
-            answer = random.choice(choices)
-
-        return self.speak(answer)
-
-    def where(self, default_answer="i don't know where"):
-        """ explain where current statement happened """
-        answer = default_answer
-        choices = [t for t in self.current_premise.where
-                   if not self.is_cached(t)]
-        if len(choices):
-            answer = random.choice(choices)
-
-        return self.speak(answer)
-
-    def sources(self, default_answer="i don't remember where i learned this"):
-        """ sources of current statement """
-        answer = default_answer
-        if len(self.current_premise.sources):
-            answer = " ".join(self.current_premise.sources)
-        return answer
-
-    def skip_feedback(self):
-        """
-        Do not ask for user feedback
-        """
-        self._skip_feedback = True
-
-    def reprompt(self):
-        """
-
-        Speak last used prompt
-
-        Returns: last prompt (str)
-
-        """
-        return self.speak(self._last_prompt)
-
-    # sync
-    def _run_once(self):
-        """
-
-        Returns:
-
-        """
-        # check if argument is fully exposed
-        if self.finished:
-            return None
-
-        # check if we have an assertion
-        if self.current_premise is None:
-            current_assertion = self.choose_premise()
-            self.current_premise = current_assertion
-
-        # pick action
-        if not self.user_agrees:
-            return self.on_negative_feedback()
-        else:
-            return self.on_positive_feedback()
-
-    def run(self):
-        """ run the interaction, ask if user agrees or not after every
-        statement
-
-        NOTE: ignores on user input callback, mostly meant for quick testing
-        """
-        # introduce argument
-        print(self.start())
-        while not self.finished:
-            try:
-                # choose output
-                output = self._run_once()
-                if output is None:
-                    # wait for output
-                    continue
-                print(output)
-                if self.finished:
-                    break
-                # get user feedback
-                if self._skip_feedback:
-                    self._skip_feedback = False
-                    continue
-                if self.get_feedback():
-                    self.agree()
-                else:
-                    self.disagree()
-
-            except Exception as e:
-                log.exception(e)
-        # finish off argument
-        print(self.end())
-
-    def get_feedback(self, prompt=None):
-        """
-        used in run(), if running async wait_for_feedback is used instead
-
-        ask user if he agrees with current statement or not
-
-        prompt is a string or list of strings, if it's a list a random entry will be picked
-
-        return True or False """
-        prompt = self._clean_prompt(prompt)
-        self._last_prompt = prompt
-        return "y" in input(prompt).lower()
-
-    # async
-    def wait_for_input(self):
-        """
-        wait until self.submit_input is called
-        """
-        self._input = ""
-        while not self._input:
-            sleep(0.5)
-
-    def wait_for_feedback(self, prompt=None):
-        """
-        ask user if he agrees with current statement or not
-
-        prompt is a string or list of strings, if it's a list a random entry will be picked
-
-        return True or False """
-        prompt = self._clean_prompt(prompt)
-        self._output += "\n" + prompt
-        self._last_prompt = prompt
-        self.wait_for_input()
-        return "y" in self._input.lower()
-
-    def submit_input(self, text):
-        """
+        Checks for the keywords ``what``, ``why``, ``how``, ``when``, and
+        ``where`` in the (already lowercased) user input and returns a random
+        answer from the corresponding list on the current premise.
 
         Args:
-            text: utterance (str)
+            user_input: Lowercased, stripped user input.
+
+        Returns:
+            Answer text if a matching 5W field is populated, else ``None``.
         """
-        self._output = ""
-        if self.on_user_input(text):
-            self._input = text
-
-    def run_async(self):
-        """
-        Start listening for user input
-        """
-        self._async_thread = Thread(target=self._async_loop)
-        self._async_thread.setDaemon(True)
-        self._async_thread.start()
-
-    def stop(self):
-        """
-        Stop listening for user input
-        """
-        self.finished = True
-        try:
-            self._async_thread.join()
-            self._async_thread.cancel()
-        except:
-            pass
-        self._async_thread = None
-
-    def _async_loop(self):
-        """ run the interaction async """
-        # introduce argument
-        self.start()
-        while not self.finished:
-            try:
-                # choose output
-                if not self._run_once():
-                    continue
-
-                if self._skip_feedback:
-                    self._skip_feedback = False
-                    continue
-                # get user feedback
-                if self.wait_for_feedback():
-                    self.agree()
-                else:
-                    self.disagree()
-            except Exception as e:
-                log.exception(e)
-        # finish off argument
-        self.end()
-
-    # events
-    def on_user_input(self, text):
-        """ handle user input
-
-        intent parsing should be done here
-
-        typical actions are
-
-        - calling self.agree() or self.disagree() to direct the policy (return True)
-        - calling self.what(), self.why(), self.how(), self.when(),
-        self.where() and setting the output (return False)
-
-        NOTE: only when running async
-
-        return True or False, this determines if dialog should proceed or
-        wait for different user input
-
-        """
-        return True
-
-    def on_positive_feedback(self):
-        """ react to positive feedback
-
-        by default goes to next statement
-
-        """
-        statement = self.choose_next_statement()
-        if not statement:
+        if not self.state.current_premise:
             return None
-        return self.speak(statement)
 
-    def on_negative_feedback(self):
-        """ react to negative feedback
-
-        by default goes to next statement
-        """
-        statement = self.choose_next_statement()
-        if not statement:
+        premise = self.argument.get_premise(self.state.current_premise)
+        if not premise:
             return None
-        return self.speak(statement)
+
+        for keyword, items in (
+            ("what", premise.what),
+            ("why", premise.why),
+            ("how", premise.how),
+            ("when", premise.when),
+            ("where", premise.where),
+        ):
+            if keyword in user_input and items:
+                return random.choice(items)
+
+        return None
+
+    def agree(self) -> None:
+        """Mark current premise as agreed."""
+        self.state.user_agrees = True
+    
+    def disagree(self) -> None:
+        """Mark current premise as disagreed."""
+        self.state.user_agrees = False
+    
+    def run_sync(self) -> Generator[str, str, None]:
+        """Run dialog synchronously.
+        
+        Yields:
+            Bot statements.
+            
+        Receives:
+            User input.
+        """
+        yield self.start()
+        
+        while not self.state.finished:
+            result = self._get_next_statement()
+            
+            if result is None:
+                yield self.end()
+                break
+            
+            premise_name, statement = result
+            yield f"{statement}\nDo you agree? (y/n) "
+            
+            # Wait for user input via send()
+            user_input = yield ""
+            
+            if user_input.lower().startswith('y'):
+                self.agree()
+            else:
+                self.disagree()
+                support = self._get_support()
+                if support:
+                    yield f"{support}\nDo you agree now? (y/n) "
+                    user_input = yield ""
+                    if user_input.lower().startswith('y'):
+                        self.agree()
+                    else:
+                        sources = self._get_sources()
+                        if sources:
+                            yield "Sources:\n" + "\n".join(sources) + "\nWe may need to agree to disagree."
+                        else:
+                            yield "I guess you may be right."
+                        self.agree()  # Move on
+    
+    async def run_async(self) -> AsyncGenerator[str, None]:
+        """Run dialog asynchronously.
+        
+        Yields:
+            Bot statements.
+        """
+        yield self.start()
+        
+        while not self.state.finished:
+            result = self._get_next_statement()
+            
+            if result is None:
+                yield self.end()
+                break
+            
+            premise_name, statement = result
+            yield f"{statement}\nDo you agree? (y/n) "
+            
+            # In real usage, await user input here
+            await asyncio.sleep(0)  # Yield control
+    
+    async def stream(self, user_input_stream: asyncio.Queue[str]) -> AsyncGenerator[str, None]:
+        """Run dialog with async user input.
+        
+        Args:
+            user_input_stream: Queue receiving user messages.
+            
+        Yields:
+            Bot responses.
+        """
+        yield self.start()
+        
+        while not self.state.finished:
+            result = self._get_next_statement()
+            
+            if result is None:
+                yield self.end()
+                break
+            
+            premise_name, statement = result
+            prompt = f"{statement}\nDo you agree? (y/n) "
+            yield prompt
+            
+            # Wait for user input
+            user_input = await user_input_stream.get()
+            
+            if user_input.lower().startswith('y'):
+                self.agree()
+            else:
+                self.disagree()
+                support = self._get_support()
+                if support:
+                    yield f"{support}\nDo you agree now? (y/n) "
+                    user_input = await user_input_stream.get()
+                    if user_input.lower().startswith('y'):
+                        self.agree()
+                    else:
+                        sources = self._get_sources()
+                        if sources:
+                            yield "Sources:\n" + "\n".join(sources) + "\nWe may need to agree to disagree."
+                        else:
+                            yield "I guess you may be right."
+                        self.agree()
 
 
 class KnowItAllPolicy(BasePolicy):
+    """Policy that provides support arguments when user disagrees.
+    
+    This policy attempts to persuade the user by offering supporting
+    evidence and sources when they disagree with a statement.
     """
-    Policy that implements minimal corrective action on negative feedback
-    """
-
-    def __init__(self, argument):
+    
+    def __init__(self, argument: Argument) -> None:
+        """Initialize policy.
+        
+        Args:
+            argument: Argument to present.
         """
+        super().__init__(argument)
+        self._pending_response: str | None = None
+    
+    def handle_input(self, user_input: str) -> str | None:
+        """Process user input and generate response.
+        
+        Handles:
+        - Agreement (y/yes)
+        - Disagreement (n/no)
+        - Questions (what, why, how, when, where)
+        
+        Args:
+            user_input: User's message.
+            
+        Returns:
+            Bot response, or None if waiting for more input.
+        """
+        user_input = user_input.strip().lower()
+
+        # Dispatch Five-Ws questions before agree/disagree logic
+        five_w = self._check_five_w(user_input)
+        if five_w:
+            return five_w
+
+        # Handle agreement/disagreement
+        if user_input.startswith(('y', 'yes', 'ok', 'sure', 'agree')):
+            self.agree()
+            return self._advance()
+        
+        elif user_input.startswith(('n', 'no', 'disagree')):
+            self.disagree()
+            return self._handle_disagreement()
+        
+        # Default: advance to next statement
+        self.agree()
+        return self._advance()
+    
+    def _advance(self) -> str | None:
+        """Advance to next statement.
+        
+        Returns:
+            Next statement with prompt, or conclusion if done.
+        """
+        result = self._get_next_statement()
+        
+        if result is None:
+            self.state.finished = True
+            return str(self.argument.conclusion)
+        
+        premise_name, statement = result
+        return f"{statement}\nDo you agree? (y/n) "
+    
+    def _handle_disagreement(self) -> str:
+        """Handle user disagreement.
+        
+        Returns:
+            Support statement or sources.
+        """
+        support = self._get_support()
+        
+        if support:
+            return f"{support}\nDo you agree now? (y/n) "
+        
+        sources = self._get_sources()
+        if sources:
+            self.state.finished = True
+            return "Sources:\n" + "\n".join(sources) + "\n\n" + str(self.argument.conclusion)
+        
+        # No support available, acknowledge and move on
+        self.agree()
+        return self._advance() or "Let's agree to disagree."
+
+
+class SilentPolicy(BasePolicy):
+    """Policy that presents all statements without waiting for feedback.
+    
+    Useful for one-way presentations or logging.
+    """
+    
+    def handle_input(self, user_input: str) -> str | None:
+        """Ignore input and advance.
+        
+        Args:
+            user_input: Ignored.
+            
+        Returns:
+            Next statement.
+        """
+        return self._advance()
+    
+    def _advance(self) -> str | None:
+        """Advance to next statement.
+        
+        Returns:
+            Next statement, or conclusion if done.
+        """
+        result = self._get_next_statement()
+        
+        if result is None:
+            self.state.finished = True
+            return str(self.argument.conclusion)
+        
+        premise_name, statement = result
+        return statement
+
+
+class SocraticPolicy(BasePolicy):
+    """Policy that asks probing questions instead of providing answers.
+    
+    This policy uses the Socratic method - when users disagree, it asks
+    follow-up questions to help them examine their reasoning rather than
+    providing counter-arguments or sources.
+    
+    Best for: Educational contexts, critical thinking practice, philosophy.
+    """
+    
+    SOCRATIC_QUESTIONS: list[str] = [
+        "What makes you say that?",
+        "Can you explain your reasoning?",
+        "What evidence would change your mind?",
+        "How does this relate to what we discussed earlier?",
+        "What assumptions are you making?",
+        "Could there be another explanation?",
+        "What are the implications of your position?",
+        "How would you respond to someone who disagrees?",
+    ]
+    
+    def __init__(self, argument: Argument) -> None:
+        """Initialize policy.
+        
+        Args:
+            argument: Argument to present.
+        """
+        super().__init__(argument)
+        self._last_question: str | None = None
+    
+    def handle_input(self, user_input: str) -> str | None:
+        """Process user input with Socratic questioning.
+
+        Five-Ws questions (what/why/how/when/where) are answered directly
+        from the premise data before falling through to Socratic probing.
 
         Args:
-            argument:
-        """
-        BasePolicy.__init__(self, name="KnowItAll", argument=argument)
-
-    def on_user_input(self, text):
-        """
-
-        answer to the [Five Ws](https://en.wikipedia.org/wiki/Five_Ws)
-
-        - Who was involved?
-        - What happened?
-        - Where did it take place?
-        - When did it take place?
-        - Why did that happen?
-
-        """
-        if "what" in text:
-            self.what()
-            self.reprompt()
-        elif "why" in text:
-            self.why()
-            self.reprompt()
-        elif "how" in text:
-            self.how()
-            self.reprompt()
-        elif "where" in text:
-            self.where()
-            self.reprompt()
-        elif "when" in text:
-            self.when()
-            self.reprompt()
-        else:
-            return True
-        return False
-
-    def on_negative_feedback(self):
-        """
-        react to negative feedback
-
-        speak a support statement
-
-        if no more support statements call on_complete_failure
-        """
-        assertion = self.current_premise
-        # comeback with support statement
-        choices = [t for t in assertion.support_statements
-                   if not self.is_cached(t)]
-
-        if not len(choices):
-            statement = self.on_complete_failure()
-        else:
-            statement = random.choice(choices)
-        return self.speak(statement)
-
-    def on_complete_failure(self):
-        """
-        handle failure to get a response, called by on_negative_feedback if
-        no support statements available
-
-        speak the sources of the premise, accept defeat, or force agreement
+            user_input: User's message.
 
         Returns:
-            sentence to speak (str)
+            Socratic question or next statement.
         """
-        if not len(self.current_premise.sources):
-            # agree on failure
-            self.agree()
-            self.skip_feedback()
-            choices = ["I guess you are right",
-                       "You may be right, i'll give it further thought",
-                       "I'm not so sure anymore, i will think about it",
-                       "I may be wrong"]
+        user_input = user_input.strip().lower()
 
-        else:
-            # let's just show the sources
-            source_str = "here is the source of my information\n"
-            source_str += "\n".join(self.current_premise.sources)
+        five_w = self._check_five_w(user_input)
+        if five_w:
+            return five_w
 
-            choices = [source_str]
-        choices = [c for c in choices if not self.is_cached(c)]
-        if not len(choices):
+        # Handle agreement/disagreement
+        if user_input.startswith(('y', 'yes', 'ok', 'sure', 'agree')):
             self.agree()
-            self.skip_feedback()
-            choices = ["We will have to agree to disagree for now"]
-        return random.choice(choices)
+            return self._advance()
+
+        elif user_input.startswith(('n', 'no', 'disagree')):
+            self.disagree()
+            return self._ask_question()
+
+        # Any other input - ask clarifying question
+        return self._ask_question()
+    
+    def _ask_question(self) -> str:
+        """Ask a Socratic question.
+        
+        Returns:
+            Question text.
+        """
+        # Pick a question different from last time
+        available = [q for q in self.SOCRATIC_QUESTIONS if q != self._last_question]
+        question = random.choice(available)
+        self._last_question = question
+        
+        return f"{question}\n"
+    
+    def _advance(self) -> str | None:
+        """Advance to next statement.
+        
+        Returns:
+            Next statement with prompt, or conclusion if done.
+        """
+        result = self._get_next_statement()
+        
+        if result is None:
+            self.state.finished = True
+            return str(self.argument.conclusion)
+        
+        premise_name, statement = result
+        return f"{statement}\nDo you agree? (y/n) "
+
+
+class DebatePolicy(BasePolicy):
+    """Policy that actively argues against the user's position.
+    
+    This policy takes an adversarial stance - it challenges disagreements
+    with counter-arguments and tries to defend the original position.
+    More confrontational than KnowItAllPolicy.
+    
+    Best for: Debate practice, steel-manning exercises, testing convictions.
+    """
+    
+    CHALLENGE_RESPONSES: list[str] = [
+        "But consider this: ",
+        "However, one could argue: ",
+        "On the other hand: ",
+        "A strong counter-argument is: ",
+        "Let me challenge that: ",
+        "I understand your point, but: ",
+        "Respectfully, I disagree because: ",
+        "That's a common objection, yet: ",
+    ]
+    
+    def __init__(self, argument: Argument) -> None:
+        """Initialize policy.
+        
+        Args:
+            argument: Argument to present.
+        """
+        super().__init__(argument)
+        self._challenge_count: int = 0
+    
+    def handle_input(self, user_input: str) -> str | None:
+        """Process user input with debate-style responses.
+
+        Five-Ws questions are answered directly before entering challenge logic.
+
+        Args:
+            user_input: User's message.
+
+        Returns:
+            Challenge, support, or next statement.
+        """
+        user_input = user_input.strip().lower()
+
+        five_w = self._check_five_w(user_input)
+        if five_w:
+            return five_w
+
+        # Handle agreement
+        if user_input.startswith(('y', 'yes', 'ok', 'sure', 'agree')):
+            self.agree()
+            self._challenge_count = 0
+            return self._advance()
+        
+        # Handle disagreement with active challenging
+        elif user_input.startswith(('n', 'no', 'disagree')):
+            self.disagree()
+            return self._challenge()
+        
+        # Default: treat as neutral, advance
+        self.agree()
+        return self._advance()
+    
+    def _challenge(self) -> str:
+        """Present a challenge to user's position.
+        
+        First tries support statements, then general challenges.
+        
+        Returns:
+            Challenge text.
+        """
+        # Try to get specific support first
+        support = self._get_support()
+        
+        if support:
+            intro = random.choice(self.CHALLENGE_RESPONSES)
+            self._challenge_count += 1
+            return f"{intro}{support}\n\nDo you still disagree? (y/n) "
+        
+        # No specific support - use generic challenge
+        self._challenge_count += 1
+        if self._challenge_count >= 2:
+            # After 2 challenges, move on
+            self.agree()
+            return self._advance() or "I see you're not convinced. Let's continue."
+        
+        return "I don't have more arguments on this point, but I maintain my position.\nShall we move on? (y/n) "
+    
+    def _advance(self) -> str | None:
+        """Advance to next statement.
+        
+        Returns:
+            Next statement with prompt, or conclusion if done.
+        """
+        result = self._get_next_statement()
+        
+        if result is None:
+            self.state.finished = True
+            return str(self.argument.conclusion)
+        
+        premise_name, statement = result
+        return f"{statement}\nDo you agree? (y/n) "
+
+
+class ExploratoryPolicy(BasePolicy):
+    """Policy that presents multiple viewpoints neutrally.
+    
+    This policy acknowledges complexity - when users disagree, it suggests
+    that reasonable people can disagree and presents the issue as nuanced.
+    
+    Best for: Controversial topics, balanced education, avoiding bias.
+    """
+    
+    NEUTRAL_ACKNOWLEDGMENTS: list[str] = [
+        "That's a reasonable perspective.",
+        "Many people share that view.",
+        "This is indeed a complex issue.",
+        "There are valid points on both sides.",
+        "This topic has nuance worth considering.",
+        "Reasonable people can disagree here.",
+        "The evidence isn't entirely clear-cut.",
+        "This deserves careful consideration.",
+    ]
+    
+    def __init__(self, argument: Argument) -> None:
+        """Initialize policy.
+        
+        Args:
+            argument: Argument to present.
+        """
+        super().__init__(argument)
+    
+    def handle_input(self, user_input: str) -> str | None:
+        """Process user input with neutral exploration.
+
+        Five-Ws questions receive a direct factual answer before the
+        neutral-acknowledgment path is taken.
+
+        Args:
+            user_input: User's message.
+
+        Returns:
+            Neutral acknowledgment or next statement.
+        """
+        user_input = user_input.strip().lower()
+
+        five_w = self._check_five_w(user_input)
+        if five_w:
+            return five_w
+
+        # Handle agreement
+        if user_input.startswith(('y', 'yes', 'ok', 'sure', 'agree')):
+            self.agree()
+            return self._advance()
+        
+        # Handle disagreement with neutral acknowledgment
+        elif user_input.startswith(('n', 'no', 'disagree')):
+            self.disagree()
+            acknowledgment = random.choice(self.NEUTRAL_ACKNOWLEDGMENTS)
+            
+            # Still offer support/sources but framed neutrally
+            support = self._get_support()
+            if support:
+                return f"{acknowledgment}\n\nSome perspectives on this topic include: {support}\n\nWhat do you think? (y/n) "
+            
+            sources = self._get_sources()
+            if sources:
+                return f"{acknowledgment}\n\nFor further reading:\n" + "\n".join(sources) + "\n\nWe may see this differently, and that's okay."
+            
+            # Nothing to offer, just acknowledge and move on
+            self.agree()
+            return self._advance() or "Let's explore the next point."
+        
+        # Default: neutral advance
+        self.agree()
+        return self._advance()
+    
+    def _advance(self) -> str | None:
+        """Advance to next statement.
+        
+        Returns:
+            Next statement with prompt, or conclusion if done.
+        """
+        result = self._get_next_statement()
+        
+        if result is None:
+            self.state.finished = True
+            return str(self.argument.conclusion)
+        
+        premise_name, statement = result
+        return f"{statement}\nWhat's your view? (y/n) "
