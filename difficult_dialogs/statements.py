@@ -15,73 +15,52 @@ s.agree()
 assert bool(s) == True
 ```
 """
+from typing import Any
 
 
-class Statement(object):
-    """
-    A text sentence that may be True or False
-    """
-    def __init__(self, text, is_true=True):
+class Statement:
+    """A text sentence that may be True or False."""
+
+    def __init__(self, text: str, is_true: bool = True) -> None:
         """
+        Args:
+            text: the text for this statement.
+            is_true: initial truth value.
+        """
+        self.text: str = str(text)
+        self._true: bool = is_true
+
+    def from_json(self, json_dict: dict[str, Any]) -> None:
+        """Set properties from a JSON dict.
 
         Args:
-            text:  the text for this statement (str)
-            is_true: truth value of this Statement (bool)
-        """
-        self.text = str(text)
-        self._true = is_true
-
-    def from_json(self, json_dict):
-        """
-        set properties from json
-
-        Args:
-            json_dict: json representation (dict)
-
-        :return:
+            json_dict: mapping with keys ``text`` and ``is_true``.
         """
         self.text = json_dict.get("text", "")
         self._true = json_dict.get("is_true", True)
 
     @property
-    def as_json(self):
-        """
-
-        Returns: json representation (dict)
-
-        """
-        return {"text": self.text,
-                "is_true": self.is_true}
+    def as_json(self) -> dict[str, Any]:
+        """Return a JSON-serialisable representation."""
+        return {"text": self.text, "is_true": self.is_true}
 
     @property
-    def is_true(self):
-        """ Statements are true by default, until user disagrees"""
+    def is_true(self) -> bool:
+        """Statements are true by default, until user disagrees."""
         return self._true
 
-    def agree(self):
-        """
-        set statement to True
-        """
+    def agree(self) -> None:
+        """Set statement to True."""
         self._true = True
 
-    def disagree(self):
-        """
-        set statement to False
-        """
+    def disagree(self) -> None:
+        """Set statement to False."""
         self._true = False
 
-    def __str__(self):
-        """
-
-        Returns: statement text
-
-        """
+    def __str__(self) -> str:
+        """Return statement text."""
         return self.text
 
-    def __bool__(self):
-        """
-
-        Returns: statement truth value
-
-        """
+    def __bool__(self) -> bool:
+        """Return statement truth value."""
         return self.is_true

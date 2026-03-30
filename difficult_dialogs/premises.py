@@ -29,16 +29,24 @@ assert p.as_json == {'is_true': False,
 ```
 """
 
+from typing import Any, Optional, Union
+
 from difficult_dialogs.statements import Statement
 from difficult_dialogs.exceptions import UnrecognizedStatementFormat, \
     UnrecognizedDescriptionFormat
 
 
-class Premise(object):
+class Premise:
 
-    def __init__(self, description, statements=None, sources=None,
-                 support=None, what=None, when=None, where=None, how=None,
-                 why=None):
+    def __init__(self, description: Union[str, Statement],
+                 statements: Optional[list[Union[str, Statement]]] = None,
+                 sources: Optional[list[str]] = None,
+                 support: Optional[list[Union[str, Statement]]] = None,
+                 what: Optional[list[Union[str, Statement]]] = None,
+                 when: Optional[list[Union[str, Statement]]] = None,
+                 where: Optional[list[Union[str, Statement]]] = None,
+                 how: Optional[list[Union[str, Statement]]] = None,
+                 why: Optional[list[Union[str, Statement]]] = None) -> None:
         """
 
         A premise is a core assumption of an argument
@@ -111,7 +119,7 @@ class Premise(object):
             self.why.append(s)
         self.description = self.validate_statement(description)
 
-    def agree(self):
+    def agree(self) -> None:
         """ flag all statements as True """
         for idx, s in enumerate(self.support_statements):
             self.support_statements[idx].agree()
@@ -119,7 +127,7 @@ class Premise(object):
             self.statements[idx].agree()
 
     @staticmethod
-    def validate_statement(statement):
+    def validate_statement(statement: Union[str, Statement]) -> Statement:
         """
 
         Args:
@@ -134,7 +142,7 @@ class Premise(object):
             raise UnrecognizedStatementFormat
         return statement
 
-    def from_json(self, json_dict):
+    def from_json(self, json_dict: dict[str, Any]) -> None:
         """
 
         Args:
@@ -149,7 +157,7 @@ class Premise(object):
             self.add_support_statement(s)
 
     @property
-    def as_json(self):
+    def as_json(self) -> dict[str, Any]:
         """
 
         Returns:
@@ -216,7 +224,7 @@ class Premise(object):
                                                 "Statement")
         self.description = text
 
-    def add_source(self, text):
+    def add_source(self, text: str) -> None:
         """
 
         Args:
@@ -225,7 +233,7 @@ class Premise(object):
         if text not in self.sources:
             self.sources.append(text)
 
-    def add_statement(self, text):
+    def add_statement(self, text: Union[str, Statement]) -> None:
         """
 
         Args:
@@ -236,7 +244,7 @@ class Premise(object):
         if text not in self.statements:
             self.statements.append(text)
 
-    def add_support_statement(self, text):
+    def add_support_statement(self, text: Union[str, Statement]) -> None:
         """
 
         Args:
@@ -297,7 +305,7 @@ class Premise(object):
             self.why.append(text)
 
     @property
-    def is_true(self):
+    def is_true(self) -> bool:
         """ premises are true if all their statements are true """
         for s in self.statements:
             if not s.is_true:

@@ -44,6 +44,7 @@ pprint(arg.as_json)
 
 from os.path import join, isdir
 from os import listdir
+from typing import Any, Optional, Union
 
 from difficult_dialogs.premises import Premise
 from difficult_dialogs.statements import Statement
@@ -54,10 +55,13 @@ from difficult_dialogs.exceptions import MissingStatementException, \
     UnrecognizedDescriptionFormat
 
 
-class Argument(object):
+class Argument:
 
-    def __init__(self, description="", premises=None, intro="",
-                 conclusion="", path=None):
+    def __init__(self, description: str = "",
+                 premises: Optional[dict[str, Premise]] = None,
+                 intro: Union[str, Statement] = "",
+                 conclusion: Union[str, Statement] = "",
+                 path: Optional[str] = None) -> None:
         """
 
         Args:

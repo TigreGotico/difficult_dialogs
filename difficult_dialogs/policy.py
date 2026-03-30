@@ -87,16 +87,15 @@ import random
 from time import sleep
 from threading import Thread
 from logging import getLogger
+from typing import Optional, Union
 
 log = getLogger("DialogRunner")
 
 
-class BasePolicy(object):
-    """
-    Template Policy that implements minimal functionality to run an argument
-    """
+class BasePolicy:
+    """Template Policy that implements minimal functionality to run an argument."""
 
-    def __init__(self, name="base", argument=None):
+    def __init__(self, name: str = "base", argument: Optional[object] = None) -> None:
         """
 
         Args:
