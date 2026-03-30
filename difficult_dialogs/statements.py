@@ -1,66 +1,45 @@
+"""Statement module - the atomic unit of dialog.
+
+A Statement is a text sentence that may be True or False based on user agreement.
 """
-A statement is the lowest level of a dialog, it is a text sentence that may be True or False
+from __future__ import annotations
 
-```python
-from difficult_dialogs.statements import Statement
-
-s = Statement("i like pizza")
-assert str(s) == "i like pizza"
-assert s.text == "i like pizza"
-
-assert bool(s) == True
-s.disagree()
-assert bool(s) == False
-s.agree()
-assert bool(s) == True
-```
-"""
-from typing import Any
+from dataclasses import dataclass, field
 
 
+@dataclass
 class Statement:
-    """A text sentence that may be True or False."""
-
-    def __init__(self, text: str, is_true: bool = True) -> None:
-        """
-        Args:
-            text: the text for this statement.
-            is_true: initial truth value.
-        """
-        self.text: str = str(text)
-        self._true: bool = is_true
-
-    def from_json(self, json_dict: dict[str, Any]) -> None:
-        """Set properties from a JSON dict.
-
-        Args:
-            json_dict: mapping with keys ``text`` and ``is_true``.
-        """
-        self.text = json_dict.get("text", "")
-        self._true = json_dict.get("is_true", True)
-
-    @property
-    def as_json(self) -> dict[str, Any]:
-        """Return a JSON-serialisable representation."""
-        return {"text": self.text, "is_true": self.is_true}
-
-    @property
-    def is_true(self) -> bool:
-        """Statements are true by default, until user disagrees."""
-        return self._true
+    """A statement that can be agreed or disagreed with.
+    
+    Attributes:
+        text: The text content of this statement.
+        agreed: Whether the user has agreed with this statement.
+    """
+    text: str
+    agreed: bool = field(default=True, init=False)
 
     def agree(self) -> None:
-        """Set statement to True."""
-        self._true = True
-
+        """Mark this statement as agreed (True)."""
+        self.agreed = True
+    
     def disagree(self) -> None:
-        """Set statement to False."""
-        self._true = False
-
-    def __str__(self) -> str:
-        """Return statement text."""
-        return self.text
-
+        """Mark this statement as disagreed (False)."""
+        self.agreed = False
+    
     def __bool__(self) -> bool:
-        """Return statement truth value."""
-        return self.is_true
+        """Return whether this statement is currently agreed."""
+        return self.agreed
+    
+    def __str__(self) -> str:
+        """Return the statement text."""
+        return self.text
+    
+    def __eq__(self, other: object) -> bool:
+        """Check equality based on text content."""
+        if not isinstance(other, Statement):
+            return NotImplemented
+        return self.text == other.text
+    
+    def __hash__(self) -> int:
+        """Hash based on text for use in sets/dicts."""
+        return hash(self.text)
