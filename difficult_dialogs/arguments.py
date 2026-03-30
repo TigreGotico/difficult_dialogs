@@ -1,533 +1,326 @@
+"""Argument module - a collection of premises forming a complete argument.
+
+An Argument is loaded from a folder structure with plain text files:
+
+    my_argument/
+    ├── intro.dialog          # Opening statement
+    ├── premise_name/
+    │   ├── description.premise   # The claim being made
+    │   ├── statement_1.dialog    # Supporting statements
+    │   ├── support.support       # Fallback arguments when user disagrees
+    │   └── source.source         # Evidence URLs
+    ├── another_premise/
+    │   └── ...
+    └── conclusion.conclusion     # Final statement
 """
-An Argument is a set of premises, a argument is True if all it's premises are True
+from __future__ import annotations
 
-Arguments can be loaded from file structuring a folder like this
-
-    $ tree argument_template/
-    argument_template/
-    ├── argument.conclusion
-    ├── argument.intro
-    ├── X.premise
-    ├── X.source
-    ├── X.support
-    └── Y.premise
-
-
-- folder name is the argument name
-
-- X.premise is a premise the argument depends on
-
-- X.support are "comebacks" for when user disagrees with premise
-
-- X.source is information source for the premise
-
-- X is the premise we are currently arguing for
-
-```python
-from difficult_dialogs.arguments import Argument
-from os.path import dirname, join
-
-arg = Argument()
-
-path = join(dirname(__file__), "argument_template")
-arg.load(path)
-
-assert arg.is_true
-assert arg.description == "argument_template"
-
-from pprint import pprint
-
-pprint(arg.as_json)
-```
-
-"""
-
-from os.path import join, isdir
-from os import listdir
-from typing import Any, Optional, Union
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
 
 from difficult_dialogs.premises import Premise
-from difficult_dialogs.statements import Statement
-from difficult_dialogs.exceptions import MissingStatementException, \
-    MissingAssertionException, BadAssertionJson, UnrecognizedStatementFormat, \
-    UnrecognizedSourceFormat, UnrecognizedArgumentFormat, BadArgumentJson, \
-    UnrecognizedConclusionFormat, UnrecognizedIntroFormat, \
-    UnrecognizedDescriptionFormat
 
 
+@dataclass
 class Argument:
-
-    def __init__(self, description: str = "",
-                 premises: Optional[dict[str, Premise]] = None,
-                 intro: Union[str, Statement] = "",
-                 conclusion: Union[str, Statement] = "",
-                 path: Optional[str] = None) -> None:
+    """An argument composed of multiple premises.
+    
+    An argument represents a complete dialog flow. It is considered True
+    when all its premises have been successfully presented and agreed with.
+    
+    Attributes:
+        name: Identifier for this argument.
+        intro: Opening statement text.
+        conclusion: Closing statement text.
+        path: Optional path to load argument from.
+    """
+    name: str = ""
+    intro: str = ""
+    conclusion: str = ""
+    path: Path | None = field(default=None, init=False)
+    _premises: dict[str, Premise] = field(default_factory=dict, repr=False)
+    
+    def __post_init__(self) -> None:
+        """Load argument if path was provided."""
+        if self.path:
+            self.load(self.path)
+    
+    @property
+    def premises(self) -> list[Premise]:
+        """Return list of all premises in this argument."""
+        return list(self._premises.values())
+    
+    @property
+    def premise_names(self) -> list[str]:
+        """Return list of premise names."""
+        return list(self._premises.keys())
+    
+    @property
+    def is_true(self) -> bool:
+        """Return True if all premises are agreed with."""
+        return all(p.is_true for p in self.premises) if self.premises else True
+    
+    @property
+    def is_complete(self) -> bool:
+        """Return True if argument has at least one premise."""
+        return len(self.premises) > 0
+    
+    def add_premise(self, premise: Premise) -> Argument:
+        """Add a premise to this argument.
+        
+        Args:
+            premise: The premise to add.
+            
+        Returns:
+            Self for method chaining.
+            
+        Raises:
+            ValueError: If premise name is empty.
         """
+        if not premise.name:
+            raise ValueError("Premise must have a name")
+        
+        self._premises[premise.name] = premise
+        return self
+    
+    def get_premise(self, name: str) -> Premise | None:
+        """Get a premise by name.
+        
+        Args:
+            name: The premise name.
+            
+        Returns:
+            The premise, or None if not found.
+        """
+        return self._premises.get(name)
+    
+    def get_next_premise(self, cache: set[str]) -> Premise | None:
+        """Get the next unspoken premise.
+        
+        Args:
+            cache: Set of already spoken premise names.
+            
+        Returns:
+            Next premise to present, or None if all spoken.
+        """
+        for name, premise in self._premises.items():
+            if name not in cache and premise.is_complete:
+                return premise
+        return None
+    
+    def load(self, path: str | Path) -> Argument:
+        """Load argument from a directory structure.
+        
+        Supports TWO formats:
+        
+        NEW FORMAT (subdirectories per premise):
+            path/
+            ├── intro.dialog
+            ├── conclusion.conclusion
+            ├── premise_name/
+            │   ├── description.premise
+            │   ├── support.support
+            │   └── source.source
+        
+        LEGACY FORMAT (flat structure):
+            path/
+            ├── argument.intro
+            ├── argument.conclusion
+            ├── X.premise
+            ├── X.support
+            ├── X.source
+            ├── X.what
+            ├── X.why
+            ├── X.how
+            ├── X.when
+            └── X.where
+        
+        Args:
+            path: Path to the argument directory.
+            
+        Returns:
+            Self for method chaining.
+            
+        Raises:
+            FileNotFoundError: If path doesn't exist.
+            ValueError: If path is not a directory.
+        """
+        path = Path(path)
+        
+        if not path.exists():
+            raise FileNotFoundError(f"Argument path does not exist: {path}")
+        
+        if not path.is_dir():
+            raise ValueError(f"Argument path must be a directory: {path}")
+        
+        self.path = path
+        
+        if not self.name:
+            self.name = path.name.replace("_", " ")
+        
+        # Try new format first (subdirectories)
+        has_subdirs = any(item.is_dir() for item in path.iterdir())
+        
+        if has_subdirs:
+            # NEW FORMAT: Load from subdirectories
+            self._load_new_format(path)
+        else:
+            # LEGACY FORMAT: Load from flat structure
+            self._load_legacy_format(path)
+        
+        return self
+    
+    def _load_new_format(self, path: Path) -> None:
+        """Load argument using new subdirectory format."""
+        # Load intro
+        intro_file = path / "intro.dialog"
+        if intro_file.exists():
+            self.intro = intro_file.read_text().strip()
+        
+        # Load conclusion
+        conclusion_file = path / "conclusion.conclusion"
+        if conclusion_file.exists():
+            self.conclusion = conclusion_file.read_text().strip()
+        
+        # Load premises from subdirectories
+        for item in path.iterdir():
+            if item.is_dir():
+                self._load_premise(item)
+    
+    def _load_legacy_format(self, path: Path) -> None:
+        """Load argument using legacy flat file format."""
+        # Load intro (legacy naming)
+        for intro_name in ["intro.dialog", "argument.intro"]:
+            intro_file = path / intro_name
+            if intro_file.exists():
+                self.intro = intro_file.read_text().strip()
+                break
+        
+        # Load conclusion (legacy naming)
+        for concl_name in ["conclusion.conclusion", "argument.conclusion"]:
+            concl_file = path / concl_name
+            if concl_file.exists():
+                self.conclusion = concl_file.read_text().strip()
+                break
+        
+        # Group files by premise name
+        premise_files: dict[str, dict[str, list[Path]]] = {}
+        
+        for file in path.iterdir():
+            if not file.is_file():
+                continue
+            
+            stem = file.stem  # e.g., "X" from "X.premise"
+            suffix = file.suffix  # e.g., ".premise"
+            
+            if stem not in premise_files:
+                premise_files[stem] = {}
+            
+            if suffix not in premise_files[stem]:
+                premise_files[stem][suffix] = []
+            
+            premise_files[stem][suffix].append(file)
+        
+        # Create premises
+        for premise_name, files_by_suffix in premise_files.items():
+            if premise_name == "argument":
+                continue
+
+            premise = Premise(name=premise_name)
+
+            for files in files_by_suffix.values():
+                for file in files:
+                    self._apply_file_to_premise(premise, file)
+
+            if premise.is_complete:
+                self.add_premise(premise)
+    
+    @staticmethod
+    def _apply_file_to_premise(premise: Premise, file: Path) -> None:
+        """Apply a single data file's contents to a premise.
+
+        Reads every non-empty line from *file* and dispatches it to the
+        appropriate ``Premise.add_*`` method based on the file extension.
+        Unrecognised extensions are silently ignored.
 
         Args:
-            description:
-            premises:
-            intro:
-            conclusion:
-            path:
+            premise: The premise to populate.
+            file: A plain-text file whose extension determines the field.
         """
-        self._premises = premises or {}
-        self.description = description
-        self.conclusion_statement = conclusion
-        self.intro_statement = intro
-        self.path = path
-        if path:
-            self.load()
+        content = file.read_text()
+        lines = [ln.strip() for ln in content.strip().split("\n") if ln.strip()]
 
-    def _validate_premise(self, premise):
-        """
+        _DISPATCH = {
+            ".premise": premise.add_statement,
+            ".support": premise.add_support,
+            ".source": premise.add_source,
+            ".what": premise.add_what,
+            ".why": premise.add_why,
+            ".how": premise.add_how,
+            ".when": premise.add_when,
+            ".where": premise.add_where,
+        }
+        adder = _DISPATCH.get(file.suffix)
+        if adder is not None:
+            for line in lines:
+                adder(line)
+
+    def _load_premise(self, premise_dir: Path) -> None:
+        """Load a single premise from a subdirectory.
 
         Args:
-            premise:
+            premise_dir: Directory containing premise files.
+        """
+        premise = Premise(name=premise_dir.name)
 
+        for file in premise_dir.iterdir():
+            if file.is_file():
+                self._apply_file_to_premise(premise, file)
+
+        if premise.is_complete:
+            self.add_premise(premise)
+    
+    def to_dict(self) -> dict[str, Any]:
+        """Convert argument to dictionary representation.
+        
         Returns:
-
+            Dictionary with argument data.
         """
-        try:
-            premise = self.add_premise(premise)
-            return premise.description.text
-        except Exception as e:
-            print(e)
-            return ""
-
-    def add_premise(self, premise):
-        """ add an premise to this argument
-
-        premise should be an Premise object
-
-        if premise is a string, an premise will be created from it
-
-        if premise is a dictionary, an premise will be created from data
-
-        if premise is a list, an premise will be created with list as statements
-
-        """
-
-
-        if isinstance(premise, dict):
-            premise = Premise("dummy").from_json(premise)
-            if premise.description == "dummy":
-                raise BadAssertionJson("no premise text given")
-        elif isinstance(premise, str):
-            premise = Premise(premise)
-        elif isinstance(premise, list):
-            if len(premise):
-                for s in premise:
-                    if not isinstance(s, str) and not isinstance(s, Statement):
-                        raise UnrecognizedStatementFormat("Tried to create "
-                                                          "an premise from invalid statements list")
-                text = premise[0]
-                statements = premise[1:]
-                premise = Premise(text, statements)
-            else:
-                raise MissingStatementException("Empty Statements list "
-                                                "provided")
-        if not isinstance(premise, Premise):
-            raise MissingAssertionException("Tried to add a non Premise "
-                                            "object")
-
-        if premise.description.text not in self._premises:
-            self._premises[premise.description.text] = premise
-        else:
-            self._premises[premise.description.text].update(premise)
-        return self._premises[premise.description.text]
-
-    def add_support(self, support_statement, premise):
-        """
-        adds a support statement to an premise of this argument
-
-        premise will be created or modified
-
-        support_statememt may be a string, Statement, list of strings or
-        list of Statements
-        """
-        txt = self._validate_premise(premise)
-        if not txt:
-            raise MissingAssertionException("tried to add support statement "
-                                            "to non existing Premise")
-
-        if not isinstance(support_statement, list):
-            support_statement = [support_statement]
-        for s in support_statement:
-            if not isinstance(s, Statement) and not isinstance(s, str):
-                raise UnrecognizedStatementFormat("Tried to create a "
-                                                  "statement from bad input "
-                                                  "type: " + str(type(s)))
-            self._premises[txt].add_support_statement(s)
-
-    def add_statement(self, statement, premise):
-        """
-        adds a statement to an premise of this argument
-
-        premise will be created or modified
-
-        statement may be a string, Statement, list of strings or list of Statements
-        """
-
-        txt = self._validate_premise(premise)
-        if not txt:
-            raise MissingAssertionException("tried to add statement to non "
-                                            "existing Premise")
-
-        if not isinstance(statement, list):
-            statement = [statement]
-        for s in statement:
-            if not isinstance(s, Statement) and not isinstance(s, str):
-                raise UnrecognizedStatementFormat("Tried to create a "
-                                                  "statement from bad input "
-                                                  "type: " + str(type(s)))
-            self._premises[txt].add_statement(s)
-
-    def add_source(self, source, premise):
-        """
-        adds a source to an premise of this argument
-
-        premise will be created or modified
-
-        source may be a string or list of strings
-        """
-
-        txt = self._validate_premise(premise)
-        if not txt:
-            raise MissingAssertionException("tried to add source to non "
-                                            "existing Premise")
-
-        if not isinstance(source, list):
-            source = [source]
-        for s in source:
-            if not isinstance(s, str):
-                raise UnrecognizedSourceFormat
-            self._premises[txt].add_source(s)
-
-    def add_what(self, text, premise):
-        """
-        adds a source to an premise of this argument
-
-        premise will be created or modified
-
-        source may be a string or list of strings
-        """
-
-        txt = self._validate_premise(premise)
-        if not txt:
-            raise MissingAssertionException("tried to add statement to non "
-                                            "existing Premise")
-
-        if not isinstance(text, list):
-            text = [text]
-        for s in text:
-            if not isinstance(s, str):
-                raise UnrecognizedSourceFormat
-            self._premises[txt].add_what_statement(s)
-
-    def add_why(self, text, premise):
-        """
-        adds a source to an premise of this argument
-
-        premise will be created or modified
-
-        source may be a string or list of strings
-        """
-
-        txt = self._validate_premise(premise)
-        if not txt:
-            raise MissingAssertionException("tried to add statement to non "
-                                            "existing Premise")
-
-        if not isinstance(text, list):
-            text = [text]
-        for s in text:
-            if not isinstance(s, str):
-                raise UnrecognizedSourceFormat
-            self._premises[txt].add_why_statement(s)
-
-    def add_where(self, text, premise):
-        """
-        adds a source to an premise of this argument
-
-        premise will be created or modified
-
-        source may be a string or list of strings
-        """
-
-        txt = self._validate_premise(premise)
-        if not txt:
-            raise MissingAssertionException("tried to add statement to non "
-                                            "existing Premise")
-
-        if not isinstance(text, list):
-            text = [text]
-        for s in text:
-            if not isinstance(s, str):
-                raise UnrecognizedSourceFormat
-            self._premises[txt].add_where_statement(s)
-
-    def add_when(self, text, premise):
-        """
-        adds a source to an premise of this argument
-
-        premise will be created or modified
-
-        source may be a string or list of strings
-        """
-
-        txt = self._validate_premise(premise)
-        if not txt:
-            raise MissingAssertionException("tried to add statement to non "
-                                            "existing Premise")
-
-        if not isinstance(text, list):
-            text = [text]
-        for s in text:
-            if not isinstance(s, str):
-                raise UnrecognizedSourceFormat
-            self._premises[txt].add_when_statement(s)
-
-    def add_how(self, text, premise):
-        """
-        adds a source to an premise of this argument
-
-        premise will be created or modified
-
-        source may be a string or list of strings
-        """
-
-        txt = self._validate_premise(premise)
-        if not txt:
-            raise MissingAssertionException("tried to add statement to non "
-                                            "existing Premise")
-
-        if not isinstance(text, list):
-            text = [text]
-        for s in text:
-            if not isinstance(s, str):
-                raise UnrecognizedSourceFormat
-            self._premises[txt].add_how_statement(s)
-
-    def agree(self):
-        """ flag all premises as True """
-
-        for a in self._premises:
-            self._premises[a].agree()
-
-    def set_description(self, text):
-        """ set argument description from string"""
-        if not isinstance(text, str):
-            raise UnrecognizedDescriptionFormat("description of an Argument "
-                                                "must be a string")
-        self.description = text
-
-    def set_intro(self, text):
-        """ set argument introduction from string or Statement """
-        if isinstance(text, str):
-            text = Statement(text)
-        if not isinstance(text, Statement):
-            raise UnrecognizedIntroFormat("introductions must be Statements")
-        self.intro_statement = text
-
-    def set_conclusion(self, text):
-        """ set argument conclusion from string or Statement """
-        if isinstance(text, str):
-            text = Statement(text)
-        if not isinstance(text, Statement):
-            raise UnrecognizedConclusionFormat("conclusions must be "
-                                               "Statements")
-        self.conclusion_statement = text
-
-    def load(self, path=None):
-        """ load argument from directory """
-        if not path:
-            path = self.path
-
-        if not path:
-            return
-        elif not isdir(path):
-            return
-
-        self.path = path
-        self.description = self.description or \
-                           path.split("/")[-1].replace("_", " ")
-        files = listdir(path)
-        premises = [f for f in files if f.endswith(".premise")]
-        for f in premises:
-            a = f.split(".")[0]
-            with open(join(path, f), "r") as fi:
-                self.add_premise(
-                    Premise(description=a,
-                            statements=fi.readlines()))
-        for f in files:
-            a = f.split(".")[0]
-            with open(join(path, f), "r") as fi:
-                if f.endswith(".support"):
-                    self.add_support(fi.readlines(), a)
-                elif f.endswith(".source"):
-                    self.add_source(fi.readlines(), a)
-                elif f.endswith(".what"):
-                    self.add_what(fi.readlines(), a)
-                elif f.endswith(".why"):
-                    self.add_why(fi.readlines(), a)
-                elif f.endswith(".when"):
-                    self.add_when(fi.readlines(), a)
-                elif f.endswith(".where"):
-                    self.add_where(fi.readlines(), a)
-                elif f.endswith(".how"):
-                    self.add_how(fi.readlines(), a)
-                elif f.endswith(".conclusion"):
-                    self.set_conclusion(" ".join(fi.readlines()))
-                elif ".intro" in f:
-                    self.set_intro(" ".join(fi.readlines()))
-
-    @property
-    def intro(self):
-        """ objective of this argument """
-        return self.intro_statement
-
-    @property
-    def conclusion(self):
-        """ conclusion of this argument """
-        return self.conclusion_statement
-
-    @property
-    def is_true(self):
-        """ Arguments are true if all their premises are true """
-        for s in self.premises:
-            if not s.is_true:
-                return False
-        return True
-
-    @property
-    def as_json(self):
-        """
-        creates a json representation of the argument
-
-           {'conclusion': 'this concludes my argument that Z is indeed True\n'
-                          ' i will use the next line to tell you something extra\n'
-                          ' here is more info\n'
-                          ' goodbye and thank you\n'
-                          ' this file was a single message',
-            'intro': 'here i introduce the topic\n'
-                     ' all lines in intro file are printed\n'
-                     ' this is a single message about X\n'
-                     ' topic introduced successfully',
-            'is_true': True,
-            'premises': [{'description': 'Y',
-                          'is_true': True,
-                          'sources': [],
-                          'statements': [
-                              'when all statements are said i will tell you '
-                              'the conclusion\n',
-                              'statements are not dependent on each other'],
-                          'support': []},
-                         {'description': 'X',
-                          'is_true': True,
-                          'sources': ['http://SOURCE_CODE.com\n',
-                                      'http://SCIENTIFIC_PAPER.net\n',
-                                      'https://WIKIPEDIA.ORG'],
-                          'statements': [
-                              'statements in .premise files are said in random '
-                              'order\n',
-                              'i will say this exactly once\n',
-                              'i will say all sentences in .premise files'],
-                          'support': ['this works the same way as .premise\n',
-                                      'i am spoken when you disagree with X\n',
-                                      'X is True because i say so']}]
-            }
-
-        Returns: json_data (dict)
-
-        """
-        return {"intro": self.intro_statement.text,
-                "conclusion": self.conclusion_statement.text,
-                "premises": [s.as_json for s in self.premises],
-                "is_true": self.is_true}
-
-    def update(self, argument):
-        """
-        argument can be an Argument object or a dictionary with a "premises" field
-
-        if argument is a list, each item will be added recursively
-
-        premises will be updated or created
-
-        """
-        if isinstance(argument, Argument):
-            for a in argument.premises:
-                self.add_premise(a)
-        elif isinstance(argument, dict):
-            assertions = argument.get("premises", [])
-            if not len(assertions):
-                raise BadArgumentJson("no premises provided")
-
-            for a in assertions:
-                self.add_premise(a)
-
-        elif isinstance(argument, list):
-            for a in argument:
-                self.update(a)
-
-        else:
-            raise UnrecognizedArgumentFormat(
-                "could not merge invalid argument type: " +
-                str(type(argument)))
-
-    @property
-    def premises(self):
-        """ list of Premise objects in this Argument """
-        bucket = []
-        for a in self._premises:
-            bucket.append(self._premises[a])
-        return bucket
-
-    @property
-    def statements(self):
-        """ list of Statement objects from all premises in this Argument """
-        bucket = []
-        for a in self._premises:
-            bucket += self._premises[a].statements
-        return bucket
-
-    @property
-    def support_statements(self):
-        """ list of Statement objects from all premises in this Argument """
-        bucket = []
-        for a in self._premises:
-            bucket += self._premises[a].support_statements
-        return bucket
-
-    @property
-    def sources(self):
-        """ list of sources from all premises in this Argument """
-        bucket = []
-        for a in self._premises:
-            bucket += self._premises[a].sources
-        return bucket
-
-    @property
-    def stats(self):
-        """ return dictionary with stats about argument """
-        return {"num_statements": len(self.statements),
-                "num_support": len(self.support_statements),
-                "num_sources": len(self.sources),
-                "num_premises": len(self.premises),
-                "is_true": self.is_true}
-
-    def __str__(self):
-        """
-
+        return {
+            "name": self.name,
+            "intro": self.intro,
+            "conclusion": self.conclusion,
+            "premises": [p.to_dict() for p in self.premises],
+            "is_true": self.is_true,
+        }
+    
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Argument:
+        """Create an Argument from a dictionary.
+        
+        Args:
+            data: Dictionary with argument data.
+            
         Returns:
-
+            New Argument instance.
         """
-        return self.description
-
-    def __bool__(self):
-        """
-
-        Returns:
-
-        """
+        arg = cls(
+            name=data.get("name", ""),
+            intro=data.get("intro", ""),
+            conclusion=data.get("conclusion", ""),
+        )
+        
+        for premise_data in data.get("premises", []):
+            premise = Premise.from_dict(premise_data)
+            arg.add_premise(premise)
+        
+        return arg
+    
+    def __bool__(self) -> bool:
+        """Return whether this argument is currently accepted as true."""
         return self.is_true
+    
+    def __str__(self) -> str:
+        """Return the argument name."""
+        return self.name
