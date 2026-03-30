@@ -281,6 +281,64 @@ class Argument:
         if premise.is_complete:
             self.add_premise(premise)
     
+    def save(self, path: str | Path | None = None) -> Path:
+        """Write the argument to the plain-text directory format.
+
+        Creates one subdirectory per premise under *path*, writing each
+        populated field to its corresponding file extension.  Empty lists
+        are skipped so the directory stays clean.
+
+        Args:
+            path: Directory to write into.  If ``None``, re-uses
+                  ``self.path`` (i.e. overwrites the directory it was
+                  loaded from).  The directory is created if it does not
+                  exist.
+
+        Returns:
+            The resolved ``Path`` that was written.
+
+        Raises:
+            ValueError: If no path is available (never loaded and none given).
+        """
+        dest = Path(path) if path is not None else self.path
+        if dest is None:
+            raise ValueError(
+                "No path specified and argument was not loaded from disk. "
+                "Pass an explicit path to save()."
+            )
+
+        dest.mkdir(parents=True, exist_ok=True)
+
+        if self.intro:
+            (dest / "intro.dialog").write_text(self.intro)
+
+        if self.conclusion:
+            (dest / "conclusion.conclusion").write_text(self.conclusion)
+
+        for premise in self.premises:
+            pdir = dest / premise.name
+            pdir.mkdir(exist_ok=True)
+
+            _FIELDS: list[tuple[list[str], str]] = [
+                (premise.statements, ".premise"),   # Statement objects → text
+                (premise.support,    ".support"),
+                (premise.sources,    ".source"),
+                (premise.what,       ".what"),
+                (premise.why,        ".why"),
+                (premise.how,        ".how"),
+                (premise.when,       ".when"),
+                (premise.where,      ".where"),
+            ]
+
+            for items, ext in _FIELDS:
+                if not items:
+                    continue
+                lines = [str(item) for item in items]
+                (pdir / f"{premise.name}{ext}").write_text("\n".join(lines))
+
+        self.path = dest
+        return dest
+
     def to_dict(self) -> dict[str, Any]:
         """Convert argument to dictionary representation.
         
