@@ -277,16 +277,14 @@ class DebaterPolicy(BasePolicy):
         "Expert consensus contradicts your claim.",
     ]
     
-    def __init__(self, argument: Argument, opposition: bool = True) -> None:
+    def __init__(self, argument: Argument) -> None:
         """Initialize Debater policy.
-        
+
         Args:
             argument: The argument to debate.
-            opposition: If True, argues against the argument's stance.
         """
         super().__init__(argument)
-        self.opposition = opposition
-        self.points_made = 0
+        self.points_made: int = 0
     
     def handle_input(self, user_input: str) -> str | None:
         """Present counterarguments.
