@@ -42,5 +42,26 @@ Audit log of AI-assisted changes to this repository.
      single static method with a `_DISPATCH` dict; new suffix→method mappings now
      require one edit instead of two.
 
-**Oversight:** Full automated test suite (552 tests) passed after each commit.
+5. **fix: typo `LLLMEnhancer` → `LLMEnhancer` in `llm/__init__.__all__`** (`llm/__init__.py`)
+   - Triple-L typo meant `LLMEnhancer` was absent from `__all__` under the correct name.
+
+6. **feat: complete Five-Ws generation; add `Argument.save()`; fix JSON fence stripping**
+   (`llm/client.py`, `llm/generator.py`, `arguments.py`)
+   - `generate_json` markdown fence stripping now handles any opening fence line (not just
+     `` ```json ``), including `` ```python ``, `` ``` ``, etc.
+   - `_generate_explanations` now requests all five keys (what/why/how/when/where); previously
+     `when` and `where` were never requested and therefore always absent.
+   - `_generate_premise` wired to call `add_when`/`add_where` via a dispatch loop.
+   - Added `Argument.save(path)` — writes the argument to the plain-text directory format.
+     Round-trip verified: build in memory → `save()` → `load()` → all fields intact.
+
+7. **fix: scope contradiction detection; add `_validate_five_ws`; save() tests**
+   (`validators.py`, `test_arguments.py`, `test_validators.py`)
+   - Contradiction detection now checks only within-premise statement pairs.  Cross-premise
+     polarity differences (e.g. "always" in premise 1, "never" in premise 2) are normal and
+     were causing false positives.
+   - Added `_validate_five_ws()`: INFO-level notice for each premise missing any 5W field.
+   - Added 7 tests for `Argument.save()` and contradiction/five-ws validator behaviour.
+
+**Oversight:** Full automated test suite (563 tests) passed after each commit.
 Human review required before merging or publishing.
