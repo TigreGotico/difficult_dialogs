@@ -191,7 +191,7 @@ def cmd_export(args: argparse.Namespace) -> int:
             print()
             print("STATISTICS:")
             print(f"  Total arguments: {stats['total_arguments']}")
-            print(f"  Categories: {', '.join(stats['by_category'].keys())}")
+            print(f"  Categories: {', '.join(k or 'uncategorized' for k in stats['by_category'].keys())}")
             if stats['validation']['validated_count'] > 0:
                 print(f"  Avg validation score: {stats['validation']['average_score']:.2f}")
         
@@ -231,7 +231,7 @@ def cmd_debate(args: argparse.Namespace) -> int:
     # Create policy
     try:
         policy = get_policy(policy_name, argument)
-    except ValueError as e:
+    except Exception as e:
         print(f"❌ {e}")
         return 1
     
