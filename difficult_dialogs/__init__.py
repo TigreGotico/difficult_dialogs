@@ -26,6 +26,7 @@ from difficult_dialogs.policy import (
     TeacherPolicy,
     DebaterPolicy,
     MinimalistPolicy,
+    AdaptivePolicy,
     PolicyState,
     POLICY_REGISTRY,
     get_policy,
@@ -58,6 +59,7 @@ __all__ = [
     "TeacherPolicy",
     "DebaterPolicy",
     "MinimalistPolicy",
+    "AdaptivePolicy",
     # Policy registry
     "POLICY_REGISTRY",
     "get_policy",

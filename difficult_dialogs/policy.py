@@ -973,6 +973,114 @@ class MinimalistPolicy(BasePolicy):
         return self.argument.conclusion[:100]
 
 
+class AdaptivePolicy(BasePolicy):
+    """Meta-policy that switches strategy based on engagement signals.
+
+    Starts with *initial_policy* (default: ``KnowItAllPolicy``).  After
+    *switch_threshold* consecutive disagreements it swaps to
+    *fallback_policy* (default: ``ExploratoryPolicy``) for the remainder
+    of the session.  State (spoken premises, transcript) is transferred
+    seamlessly so no content is repeated.
+
+    Best for: public-facing deployments where audience sentiment is unknown.
+    """
+
+    def __init__(
+        self,
+        argument: Argument,
+        initial_policy: type[BasePolicy] = KnowItAllPolicy,
+        fallback_policy: type[BasePolicy] = ExploratoryPolicy,
+        switch_threshold: int = 3,
+    ) -> None:
+        """Initialise AdaptivePolicy.
+
+        Args:
+            argument: Argument to present.
+            initial_policy: Policy class to start with.
+            fallback_policy: Policy class to switch to after threshold reached.
+            switch_threshold: Number of consecutive disagreements before switching.
+        """
+        super().__init__(argument)
+        self._initial_cls = initial_policy
+        self._fallback_cls = fallback_policy
+        self.switch_threshold = switch_threshold
+        self._consecutive_disagree: int = 0
+        self._switched: bool = False
+        self._active: BasePolicy = initial_policy(argument)
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _sync_state(self) -> None:
+        """Copy shared session state from this policy into the active delegate."""
+        self._active.state.spoken_premises = self.state.spoken_premises
+        self._active.state.spoken_statements = self.state.spoken_statements
+        self._active.state.current_premise = self.state.current_premise
+        self._active.state.user_agrees = self.state.user_agrees
+        self._active.state.finished = self.state.finished
+        self._active.state.challenge_count = self.state.challenge_count
+        self._active.state.transcript = self.state.transcript
+
+    def _pull_state(self) -> None:
+        """Copy shared session state back from the active delegate."""
+        self.state.spoken_premises = self._active.state.spoken_premises
+        self.state.spoken_statements = self._active.state.spoken_statements
+        self.state.current_premise = self._active.state.current_premise
+        self.state.user_agrees = self._active.state.user_agrees
+        self.state.finished = self._active.state.finished
+        self.state.challenge_count = self._active.state.challenge_count
+        self.state.transcript = self._active.state.transcript
+
+    def _maybe_switch(self, user_input: str) -> None:
+        """Track disagreement count and switch policy when threshold hit."""
+        if self._switched:
+            return
+        lower = user_input.lower()
+        if any(w in lower for w in ("no", "disagree", "wrong", "false")):
+            self._consecutive_disagree += 1
+        else:
+            self._consecutive_disagree = 0
+
+        if self._consecutive_disagree >= self.switch_threshold:
+            new_policy = self._fallback_cls(self.argument)
+            self._sync_state()
+            new_policy.state = self._active.state
+            self._active = new_policy
+            self._switched = True
+
+    # ------------------------------------------------------------------
+    # Public interface
+    # ------------------------------------------------------------------
+
+    @property
+    def switched(self) -> bool:
+        """True once the fallback policy has been activated."""
+        return self._switched
+
+    @property
+    def active_policy(self) -> BasePolicy:
+        """The currently active delegate policy."""
+        return self._active
+
+    def start(self) -> str:
+        """Start dialog, initialise active policy."""
+        intro = super().start()
+        self._active = self._initial_cls(self.argument)
+        self._sync_state()
+        self._consecutive_disagree = 0
+        self._switched = False
+        return intro
+
+    def handle_input(self, user_input: str) -> str | None:
+        """Delegate to active policy, switching if threshold reached."""
+        self._maybe_switch(user_input)
+        self._sync_state()
+        response = self._active.handle_input(user_input)
+        self._pull_state()
+        return response
+
+
 # Registry mapping lowercase names to policy classes.
 POLICY_REGISTRY: dict[str, type[BasePolicy]] = {
     "knowitall": KnowItAllPolicy,
@@ -985,6 +1093,7 @@ POLICY_REGISTRY: dict[str, type[BasePolicy]] = {
     "teacher": TeacherPolicy,
     "debater": DebaterPolicy,
     "minimalist": MinimalistPolicy,
+    "adaptive": AdaptivePolicy,
 }
 
 

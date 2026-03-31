@@ -450,3 +450,87 @@ class TestMinimalistPolicyBranches:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestAdaptivePolicy:
+    """Tests for AdaptivePolicy meta-policy."""
+
+    def test_starts_with_initial_policy(self, sample_argument: Argument) -> None:
+        """Should start with the initial policy class."""
+        from difficult_dialogs.policy import AdaptivePolicy, KnowItAllPolicy
+        policy = AdaptivePolicy(sample_argument)
+        policy.start()
+        assert isinstance(policy.active_policy, KnowItAllPolicy)
+        assert not policy.switched
+
+    def test_switches_after_threshold(self, sample_argument: Argument) -> None:
+        """After switch_threshold disagreements, fallback policy activates."""
+        from difficult_dialogs.policy import AdaptivePolicy, ExploratoryPolicy
+        policy = AdaptivePolicy(sample_argument, switch_threshold=2)
+        policy.start()
+        policy.handle_input("no")
+        assert not policy.switched
+        policy.handle_input("no disagree")
+        assert policy.switched
+        assert isinstance(policy.active_policy, ExploratoryPolicy)
+
+    def test_no_switch_on_agreement(self, sample_argument: Argument) -> None:
+        """Consecutive agreements should not trigger switch."""
+        from difficult_dialogs.policy import AdaptivePolicy
+        policy = AdaptivePolicy(sample_argument, switch_threshold=2)
+        policy.start()
+        for _ in range(5):
+            policy.handle_input("yes")
+        assert not policy.switched
+
+    def test_consecutive_counter_resets_on_agree(self, sample_argument: Argument) -> None:
+        """Agreement resets the consecutive disagree counter."""
+        from difficult_dialogs.policy import AdaptivePolicy
+        policy = AdaptivePolicy(sample_argument, switch_threshold=3)
+        policy.start()
+        policy.handle_input("no")
+        policy.handle_input("yes")   # reset
+        policy.handle_input("no")
+        assert not policy.switched   # only 1 consecutive after reset
+
+    def test_does_not_switch_twice(self, sample_argument: Argument) -> None:
+        """Once switched, further disagreements don't change policy again."""
+        from difficult_dialogs.policy import AdaptivePolicy, ExploratoryPolicy
+        policy = AdaptivePolicy(sample_argument, switch_threshold=1)
+        policy.start()
+        policy.handle_input("no")
+        assert policy.switched
+        first_active = policy.active_policy
+        policy.handle_input("no")
+        assert policy.active_policy is first_active
+
+    def test_custom_policies(self, sample_argument: Argument) -> None:
+        """Custom initial and fallback classes are respected."""
+        from difficult_dialogs.policy import AdaptivePolicy, SocraticPolicy, DebatePolicy
+        policy = AdaptivePolicy(
+            sample_argument,
+            initial_policy=SocraticPolicy,
+            fallback_policy=DebatePolicy,
+            switch_threshold=1,
+        )
+        policy.start()
+        assert isinstance(policy.active_policy, SocraticPolicy)
+        policy.handle_input("no")
+        assert isinstance(policy.active_policy, DebatePolicy)
+
+    def test_state_is_shared_after_switch(self, sample_argument: Argument) -> None:
+        """Spoken premises carry over to the fallback policy after switch."""
+        from difficult_dialogs.policy import AdaptivePolicy
+        policy = AdaptivePolicy(sample_argument, switch_threshold=1)
+        policy.start()
+        # Advance one premise via a "yes"
+        policy.handle_input("yes")
+        spoken_before = set(policy.state.spoken_premises)
+        policy.handle_input("no")  # triggers switch
+        assert policy.state.spoken_premises == spoken_before
+
+    def test_registry_lookup(self, sample_argument: Argument) -> None:
+        """AdaptivePolicy is accessible via get_policy('adaptive', ...)."""
+        from difficult_dialogs.policy import get_policy, AdaptivePolicy
+        p = get_policy("adaptive", sample_argument)
+        assert isinstance(p, AdaptivePolicy)
