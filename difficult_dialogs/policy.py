@@ -20,6 +20,13 @@ if TYPE_CHECKING:
 
 
 @dataclass
+class TranscriptEntry:
+    """A single turn in the conversation transcript."""
+    role: str   # "bot" or "user"
+    text: str
+
+
+@dataclass
 class PolicyState:
     """Tracks the current state of a dialog session."""
     spoken_premises: set[str] = field(default_factory=set)
@@ -28,6 +35,7 @@ class PolicyState:
     user_agrees: bool = True
     finished: bool = False
     challenge_count: int = 0
+    transcript: list[TranscriptEntry] = field(default_factory=list)
 
 
 class BasePolicy(ABC):
@@ -65,21 +73,43 @@ class BasePolicy(ABC):
     
     def start(self) -> str:
         """Start the dialog and return intro statement.
-        
+
         Returns:
             Intro statement text.
         """
         self.state = PolicyState()
-        return str(self.argument.intro)
-    
+        intro = str(self.argument.intro)
+        self.state.transcript.append(TranscriptEntry(role="bot", text=intro))
+        return intro
+
     def end(self) -> str:
         """End the dialog and return conclusion.
-        
+
         Returns:
             Conclusion statement text.
         """
         self.state.finished = True
-        return str(self.argument.conclusion)
+        conclusion = str(self.argument.conclusion)
+        self.state.transcript.append(TranscriptEntry(role="bot", text=conclusion))
+        return conclusion
+
+    def respond(self, user_input: str) -> str | None:
+        """Record user input in transcript, then delegate to handle_input.
+
+        Prefer calling this over ``handle_input`` directly so that the full
+        conversation is captured in ``state.transcript``.
+
+        Args:
+            user_input: Text input from user.
+
+        Returns:
+            Response text, or None.
+        """
+        self.state.transcript.append(TranscriptEntry(role="user", text=user_input))
+        response = self.handle_input(user_input)
+        if response:
+            self.state.transcript.append(TranscriptEntry(role="bot", text=response))
+        return response
     
     def _get_next_statement(self) -> tuple[str, str] | None:
         """Get the next statement to present.
@@ -214,7 +244,10 @@ class BasePolicy(ABC):
             if not response:
                 break
             user_input = yield response
+            self.state.transcript.append(TranscriptEntry(role="user", text=user_input or ""))
             response = self.handle_input(user_input or "")
+            if response:
+                self.state.transcript.append(TranscriptEntry(role="bot", text=response))
             if self.state.finished or response is None:
                 yield self.end()
                 break
@@ -242,7 +275,7 @@ class BasePolicy(ABC):
 
         while not self.state.finished:
             user_input = await user_input_stream.get()
-            response = self.handle_input(user_input)
+            response = self.respond(user_input)
             if response:
                 yield response
             if self.state.finished:

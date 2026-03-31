@@ -730,3 +730,55 @@ def test_all_policies_handle_disagreement() -> None:
         # Each policy should respond to disagreement in its own way
         response = policy.handle_input("no")
         assert response is not None, f"{policy.__class__.__name__} returned None on disagreement"
+
+
+# ---------------------------------------------------------------------------
+# Transcript
+# ---------------------------------------------------------------------------
+
+def test_transcript_populated_by_start() -> None:
+    """start() records a bot entry in the transcript."""
+    policy = KnowItAllPolicy(make_arg())
+    policy.start()
+    assert len(policy.state.transcript) == 1
+    assert policy.state.transcript[0].role == "bot"
+
+
+def test_transcript_populated_by_respond() -> None:
+    """respond() records user + bot entries."""
+    policy = KnowItAllPolicy(make_arg())
+    policy.start()
+    policy.respond("yes")
+    # start() added 1, respond() adds user + bot = 3 total (or 2 if bot is None)
+    assert any(e.role == "user" for e in policy.state.transcript)
+
+
+def test_transcript_populated_by_end() -> None:
+    """end() records a bot entry for the conclusion."""
+    policy = KnowItAllPolicy(make_arg())
+    policy.start()
+    policy.end()
+    roles = [e.role for e in policy.state.transcript]
+    assert roles.count("bot") >= 2  # intro + conclusion
+
+
+def test_transcript_reset_on_start() -> None:
+    """Calling start() again clears the previous transcript."""
+    policy = KnowItAllPolicy(make_arg())
+    policy.start()
+    policy.respond("yes")
+    policy.start()  # reset
+    assert len(policy.state.transcript) == 1  # only new intro
+
+
+def test_run_sync_populates_transcript() -> None:
+    """run_sync() records both user and bot turns."""
+    policy = KnowItAllPolicy(make_arg())
+    gen = policy.run_sync()
+    next(gen)                    # bot intro
+    try:
+        gen.send("yes")          # user turn → bot response
+    except StopIteration:
+        pass
+    user_turns = [e for e in policy.state.transcript if e.role == "user"]
+    assert len(user_turns) >= 1

@@ -15,6 +15,7 @@ from difficult_dialogs.premises import Premise
 from difficult_dialogs.arguments import Argument
 from difficult_dialogs.policy import (
     BasePolicy,
+    TranscriptEntry,
     KnowItAllPolicy,
     SilentPolicy,
     SocraticPolicy,
@@ -45,6 +46,7 @@ __all__ = [
     # Policy base + state
     "BasePolicy",
     "PolicyState",
+    "TranscriptEntry",
     # Built-in policies
     "KnowItAllPolicy",
     "SilentPolicy",
