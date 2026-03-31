@@ -33,6 +33,7 @@ from difficult_dialogs.policy import (
     get_policy,
 )
 
+from difficult_dialogs.library import ArgumentLibrary, SearchResult
 from difficult_dialogs.version import __version__
 __all__ = [
     # Exceptions
@@ -62,6 +63,9 @@ __all__ = [
     "MinimalistPolicy",
     "AdaptivePolicy",
     "WebhookPolicy",
+    # Library / search
+    "ArgumentLibrary",
+    "SearchResult",
     # Policy registry
     "POLICY_REGISTRY",
     "get_policy",
