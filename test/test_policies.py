@@ -319,6 +319,27 @@ class TestTeacherPolicyBranches:
         response = policy.handle_input("no I'm confused")
         assert response == "Let me rephrase that more clearly."
 
+    def test_get_explanation_fallback_to_conclusion(self) -> None:
+        """_get_explanation returns conclusion when all statements spoken."""
+        arg = Argument(name="test", intro="I.", conclusion="The final word.")
+        p = Premise(name="p1")
+        p.add_statement("s1")
+        arg.add_premise(p)
+        policy = TeacherPolicy(arg)
+        policy.state.spoken_statements.add("s1")
+        policy.state.spoken_premises.add("p1")
+        # Question input calls _get_explanation
+        response = policy.handle_input("what does that mean?")
+        assert "The final word." in response
+
+    def test_five_w_bypasses_teacher_logic(self, sample_argument: Argument) -> None:
+        """5W answer bypasses Teacher question/agree/disagree branching."""
+        sample_argument.premises[0].add_how("By using logic.")
+        policy = TeacherPolicy(sample_argument)
+        policy.state.current_premise = sample_argument.premises[0].name
+        response = policy.handle_input("how does that work")
+        assert response == "By using logic."
+
 
 class TestDebaterPolicyBranches:
     """Cover disagree double-down and default present-argument paths."""
@@ -350,6 +371,32 @@ class TestDebaterPolicyBranches:
         # Long input triggers attack branch
         response = policy.handle_input("I think this argument is certainly true")
         assert response in DebaterPolicy.ATTACK_PHRASES
+
+    def test_default_falls_to_conclusion_when_exhausted(self) -> None:
+        """Short neutral input with no statements returns conclusion."""
+        arg = Argument(name="test", intro="I.", conclusion="Final.")
+        p = Premise(name="p1")
+        p.add_statement("s1")
+        arg.add_premise(p)
+        policy = DebaterPolicy(arg)
+        policy.state.spoken_statements.add("s1")
+        policy.state.spoken_premises.add("p1")
+        response = policy.handle_input("ok")
+        assert response == "Final."
+
+    def test_agree_returns_defense_phrase(self, sample_argument: Argument) -> None:
+        """'yes' input returns a DEFENSE_PHRASES response."""
+        policy = DebaterPolicy(sample_argument)
+        response = policy.handle_input("yes")
+        assert response in DebaterPolicy.DEFENSE_PHRASES
+
+    def test_five_w_bypasses_debater_logic(self, sample_argument: Argument) -> None:
+        """5W answer bypasses Debater attack/agree/disagree branching."""
+        sample_argument.premises[0].add_what("A structured claim.")
+        policy = DebaterPolicy(sample_argument)
+        policy.state.current_premise = sample_argument.premises[0].name
+        response = policy.handle_input("what is this")
+        assert response == "A structured claim."
 
 
 class TestMinimalistPolicyBranches:
@@ -385,6 +432,17 @@ class TestMinimalistPolicyBranches:
         policy.state.spoken_premises.add("p1")
         response = policy.handle_input("hmm")
         assert response == "Short end."
+
+    def test_five_w_truncated_in_minimalist(self, sample_argument: Argument) -> None:
+        """5W answer is truncated to 100 chars in MinimalistPolicy."""
+        long_text = "Because " + "x" * 200
+        sample_argument.premises[0].add_why(long_text)
+        policy = MinimalistPolicy(sample_argument)
+        policy.state.current_premise = sample_argument.premises[0].name
+        response = policy.handle_input("why")
+        assert response is not None
+        assert response.endswith("...")
+        assert len(response) == 103  # 100 chars + "..."
 
 
 if __name__ == "__main__":
