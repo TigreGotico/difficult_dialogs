@@ -361,5 +361,91 @@ class TestExportToSQLite:
         db.close()
 
 
+class TestExportCoverageBranches:
+    """Cover remaining uncovered branches in export.py."""
+
+    def test_json_encoder_fallback_for_unknown_type(self) -> None:
+        """ArgumentJSONEncoder falls back to super().default() for unknown types."""
+        from difficult_dialogs.export import ArgumentEncoder as ArgumentJSONEncoder
+        import json
+
+        encoder = ArgumentJSONEncoder()
+        with pytest.raises(TypeError):
+            encoder.default(object())
+
+    def test_get_argument_returns_none_for_missing(self, temp_dir: Path) -> None:
+        """get_argument() returns None when argument not in database."""
+        db = LibraryDatabase(temp_dir / "test.db")
+        result = db.get_argument("nonexistent_argument")
+        assert result is None
+        db.close()
+
+    def test_list_arguments_with_category_filter(
+        self, temp_dir: Path, sample_argument: Argument
+    ) -> None:
+        """list_arguments() filters by category when provided."""
+        db = LibraryDatabase(temp_dir / "test.db")
+        db.add_argument(sample_argument, category="science")
+
+        arg2 = Argument(name="Other Arg", intro="I.", conclusion="C.")
+        arg2.add_premise(Premise(name="p1").add_statement("s1"))
+        db.add_argument(arg2, category="history")
+
+        science_args = db.list_arguments(category="science")
+        assert "Test Argument" in science_args
+        assert "Other Arg" not in science_args
+        db.close()
+
+    def test_export_to_sqlite_with_validation(self, temp_dir: Path) -> None:
+        """export_to_sqlite with include_validation=True runs validation."""
+        from difficult_dialogs.export import export_to_sqlite
+
+        args_dir = temp_dir / "args"
+        args_dir.mkdir()
+        arg_dir = args_dir / "my_arg"
+        arg_dir.mkdir()
+
+        arg = Argument(
+            name="my arg",
+            intro="This is a sufficiently long introduction for validation tests.",
+            conclusion="This is a sufficiently long conclusion for validation tests.",
+        )
+        p = Premise(name="p1")
+        p.add_statement("Statement one with enough length for validation.")
+        p2 = Premise(name="p2")
+        p2.add_statement("Statement two with enough length for validation.")
+        arg.add_premise(p)
+        arg.add_premise(p2)
+        arg.save(arg_dir)
+
+        db_path = temp_dir / "library.db"
+        db = export_to_sqlite(args_dir, db_path, include_validation=True)
+        stats = db.get_statistics()
+        assert stats["total_arguments"] >= 1
+        db.close()
+
+    def test_export_library_json_skips_bad_dirs(self, temp_dir: Path) -> None:
+        """export_library_to_json skips directories that fail to load."""
+        args_dir = temp_dir / "args"
+        args_dir.mkdir()
+
+        # Valid argument
+        good_dir = args_dir / "good"
+        good_dir.mkdir()
+        arg = Argument(name="Good Arg", intro="Intro.", conclusion="Conclusion.")
+        arg.add_premise(Premise(name="p1").add_statement("s1"))
+        arg.save(good_dir)
+
+        # Bad directory: no intro.dialog, no valid structure
+        bad_dir = args_dir / "bad_subdir"
+        bad_dir.mkdir()
+        (bad_dir / "junk.txt").write_text("not an argument")
+
+        output_path = temp_dir / "library.json"
+        result = export_library_to_json(args_dir, output_path)
+        # Should succeed (bad dirs are silently skipped)
+        assert output_path.exists()
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
