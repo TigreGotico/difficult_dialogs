@@ -35,8 +35,7 @@ Legacy format was dropped in refactor. No longer present.
 
 ~~Dual policy modules~~ — resolved: all 10 policy classes, `POLICY_REGISTRY`, and `get_policy` merged into `policy.py`; `policies.py` deleted.
 
-### `export.py` size
-At 589 lines, `export.py` mixes SQLite schema management, CRUD, JSON serialization, and validation. Should be split into `export/json.py`, `export/sqlite.py`, and `export/validator_bridge.py`.
+~~`export.py` size~~ — resolved: split into `export/json.py`, `export/sqlite.py`, `export/__init__.py`.
 
 ### `cli.py:cmd_generate` depends on live LLM
 `cmd_generate` has no dry-run or offline mode. Integration tests must mock the entire `ArgumentGenerator` stack. Consider a `--dry-run` flag that validates server connectivity only.

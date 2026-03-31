@@ -9,8 +9,8 @@ Agent proposals for refactors and enhancements. Not yet approved or scheduled.
 ### ~~1. Merge `policy.py` and `policies.py` into a single module~~ — DONE
 All 10 policy classes + `POLICY_REGISTRY` + `get_policy` now live in `policy.py`. `policies.py` deleted.
 
-### 2. Split `export.py` into focused modules
-589-line file mixing SQLite schema, CRUD, JSON serialization, and validation bridging. Proposed: `export/json.py`, `export/sqlite.py`, `export/validation.py`, `export/__init__.py` re-exporting the public API.
+### ~~2. Split `export.py` into focused modules~~ — DONE
+`export.py` (589 lines) split into `export/json.py` (JSON + encoder), `export/sqlite.py` (LibraryDatabase + export_to_sqlite), `export/__init__.py` (re-exports). Public API unchanged.
 
 ### ~~3. Replace `_DISPATCH` dict with a single `Premise.apply_file()` method~~ — DONE
 `Premise.apply_file(path)` — `premises.py:127`. `Argument._apply_file_to_premise` removed.
