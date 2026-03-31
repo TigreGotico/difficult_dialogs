@@ -250,15 +250,12 @@ class TestMaieuticPolicyBranches:
         assert response == "What it really means."
 
     def test_question_count_increments(self, sample_argument: Argument) -> None:
-        """question_count increments for each intro question asked."""
+        """question_count increments when the user disagrees (triggering a topic question)."""
         policy = MaieuticPolicy(sample_argument)
         policy.start()
-        # First neutral input: question_count goes 0→1 (intro question asked)
-        policy.handle_input("maybe")
+        # Disagreement: question_count goes 0→1 (DISAGREEMENT_QUESTIONS asked)
+        policy.handle_input("nope")
         assert policy.question_count == 1
-        # Second neutral input: question_count≠0 so presents statement and resets to 0
-        policy.handle_input("maybe")
-        assert policy.question_count == 0
 
 
 class TestSkepticPolicyBranches:
@@ -273,10 +270,11 @@ class TestSkepticPolicyBranches:
         assert any(phrase.rstrip() in response for phrase in SkepticPolicy.COUNTER_PHRASES)
 
     def test_default_skepticism(self, sample_argument: Argument) -> None:
-        """Neutral input falls to default skepticism message."""
+        """Ambiguous / agreement input returns a CHALLENGE_PHRASES response."""
         policy = SkepticPolicy(sample_argument)
+        # "perhaps" is parsed as agreement (default=True) → triggers challenge
         response = policy.handle_input("perhaps")
-        assert response == "I need more convincing. What specific evidence can you provide?"
+        assert response in SkepticPolicy.CHALLENGE_PHRASES
 
     def test_five_w_bypasses_challenge(self, sample_argument: Argument) -> None:
         """5W question is answered before challenge logic when a premise is active."""
@@ -291,14 +289,14 @@ class TestTeacherPolicyBranches:
     """Cover _teach_with_example and default paths."""
 
     def test_teach_with_example_default_path(self, sample_argument: Argument) -> None:
-        """Neutral input triggers _teach_with_example with a statement."""
+        """Agreement input triggers _reinforce_concept (summary + statement)."""
         policy = TeacherPolicy(sample_argument)
-        response = policy.handle_input("okay")
+        response = policy.handle_input("yes")
         assert response is not None
-        assert any(intro in response for intro in TeacherPolicy.EXAMPLE_INTROS)
+        assert any(phrase in response for phrase in TeacherPolicy.SUMMARY_PHRASES)
 
     def test_teach_with_example_fallback_to_conclusion(self) -> None:
-        """_teach_with_example returns conclusion when no statements remain."""
+        """When exhausted, agreement path (_reinforce_concept) includes the conclusion."""
         arg = Argument(name="test", intro="I.", conclusion="The end.")
         p = Premise(name="p1")
         p.add_statement("s1")
@@ -307,8 +305,9 @@ class TestTeacherPolicyBranches:
         # Exhaust all statements
         policy.state.spoken_statements.add("s1")
         policy.state.spoken_premises.add("p1")
-        response = policy.handle_input("okay")
-        assert response == "The end."
+        # Agreement → _reinforce_concept → summary phrase + conclusion
+        response = policy.handle_input("yes")
+        assert "The end." in response
 
     def test_clarify_misconception_fallback(self) -> None:
         """_clarify_misconception returns rephrase message when no statements remain."""
@@ -375,8 +374,8 @@ class TestDebaterPolicyBranches:
         response = policy.handle_input("I think this argument is certainly true")
         assert response in DebaterPolicy.ATTACK_PHRASES
 
-    def test_default_falls_to_conclusion_when_exhausted(self) -> None:
-        """Short neutral input with no statements returns conclusion."""
+    def test_agree_when_exhausted_returns_defense_phrase(self) -> None:
+        """Agreement on exhausted state returns a DEFENSE_PHRASES response."""
         arg = Argument(name="test", intro="I.", conclusion="Final.")
         p = Premise(name="p1")
         p.add_statement("s1")
@@ -385,7 +384,7 @@ class TestDebaterPolicyBranches:
         policy.state.spoken_statements.add("s1")
         policy.state.spoken_premises.add("p1")
         response = policy.handle_input("ok")
-        assert response == "Final."
+        assert response in DebaterPolicy.DEFENSE_PHRASES
 
     def test_agree_returns_defense_phrase(self, sample_argument: Argument) -> None:
         """'yes' input returns a DEFENSE_PHRASES response."""
@@ -424,8 +423,8 @@ class TestMinimalistPolicyBranches:
         assert response is not None
         assert len(response) <= 103  # 100 chars + "..."
 
-    def test_default_falls_to_conclusion_when_exhausted(self) -> None:
-        """Default path returns conclusion when all statements spoken."""
+    def test_agree_when_exhausted_returns_brief_agree(self) -> None:
+        """Agreement on exhausted state returns a BRIEF_AGREE response."""
         arg = Argument(name="test", intro="I.", conclusion="Short end.")
         p = Premise(name="p1")
         p.add_statement("s1")
@@ -434,7 +433,7 @@ class TestMinimalistPolicyBranches:
         policy.state.spoken_statements.add("s1")
         policy.state.spoken_premises.add("p1")
         response = policy.handle_input("hmm")
-        assert response == "Short end."
+        assert response in MinimalistPolicy.BRIEF_AGREE
 
     def test_five_w_truncated_in_minimalist(self, sample_argument: Argument) -> None:
         """5W answer is truncated to 100 chars in MinimalistPolicy."""

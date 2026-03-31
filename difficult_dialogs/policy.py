@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, AsyncGenerator, Generator
 
 from difficult_dialogs.exceptions import InvalidPolicyError
+from difficult_dialogs.yesno import is_agreement, is_disagreement
 
 if TYPE_CHECKING:
     from difficult_dialogs.arguments import Argument
@@ -386,21 +387,16 @@ class KnowItAllPolicy(BasePolicy):
             return five_w
 
         # Handle agreement/disagreement
-        if user_input.startswith(('y', 'yes', 'ok', 'sure', 'agree')):
-            self.agree()
-            return self._advance()
-        
-        elif user_input.startswith(('n', 'no', 'disagree')):
+        if is_disagreement(user_input):
             self.disagree()
             return self._handle_disagreement()
-        
-        # Default: advance to next statement
+
         self.agree()
         return self._advance()
-    
+
     def _advance(self) -> str | None:
         """Advance to next statement.
-        
+
         Returns:
             Next statement with prompt, or conclusion if done.
         """
@@ -516,13 +512,13 @@ class SocraticPolicy(BasePolicy):
             return five_w
 
         # Handle agreement/disagreement
-        if user_input.startswith(('y', 'yes', 'ok', 'sure', 'agree')):
-            self.agree()
-            return self._advance()
-
-        elif user_input.startswith(('n', 'no', 'disagree')):
+        if is_disagreement(user_input):
             self.disagree()
             return self._ask_question()
+
+        if is_agreement(user_input):
+            self.agree()
+            return self._advance()
 
         # Any other input - ask clarifying question
         return self._ask_question()
@@ -603,18 +599,12 @@ class DebatePolicy(BasePolicy):
             return five_w
 
         # Handle agreement
-        if user_input.startswith(('y', 'yes', 'ok', 'sure', 'agree')):
-            self.agree()
-            self.state.challenge_count = 0
-            return self._advance()
-
-        # Handle disagreement with active challenging
-        elif user_input.startswith(('n', 'no', 'disagree')):
+        if is_disagreement(user_input):
             self.disagree()
             return self._challenge()
 
-        # Default: treat as neutral, advance
         self.agree()
+        self.state.challenge_count = 0
         return self._advance()
     
     def _challenge(self) -> str:
@@ -704,30 +694,21 @@ class ExploratoryPolicy(BasePolicy):
         if five_w:
             return five_w
 
-        # Handle agreement
-        if user_input.startswith(('y', 'yes', 'ok', 'sure', 'agree')):
-            self.agree()
-            return self._advance()
-        
-        # Handle disagreement with neutral acknowledgment
-        elif user_input.startswith(('n', 'no', 'disagree')):
+        if is_disagreement(user_input):
             self.disagree()
             acknowledgment = random.choice(self.NEUTRAL_ACKNOWLEDGMENTS)
-            
-            # Still offer support/sources but framed neutrally
+
             support = self._get_support()
             if support:
                 return f"{acknowledgment}\n\nSome perspectives on this topic include: {support}\n\nWhat do you think? (y/n) "
-            
+
             sources = self._get_sources()
             if sources:
                 return f"{acknowledgment}\n\nFor further reading:\n" + "\n".join(sources) + "\n\nWe may see this differently, and that's okay."
-            
-            # Nothing to offer, just acknowledge and move on
+
             self.agree()
             return self._advance() or "Let's explore the next point."
-        
-        # Default: neutral advance
+
         self.agree()
         return self._advance()
     
@@ -783,16 +764,16 @@ class MaieuticPolicy(BasePolicy):
         if five_w:
             return five_w
 
-        is_agreement = any(word in user_lower for word in ['yes', 'agree', 'yep', 'true'])
-        is_disagreement = any(word in user_lower for word in ['no', 'disagree', 'false', 'wrong'])
+        _disagrees = is_disagreement(user_lower)
+        _agrees = is_agreement(user_lower)
 
-        if is_disagreement:
+        if _disagrees:
             templates = self.DISAGREEMENT_QUESTIONS
             template = random.choice(templates)
             self.question_count += 1
             return template.format(topic=self.argument.name.replace("_", " "))
 
-        if is_agreement:
+        if _agrees:
             # After agreement, present the next premise statement
             self.agree()
             next_stmt = self._get_next_statement()
@@ -855,10 +836,10 @@ class SkepticPolicy(BasePolicy):
         if five_w:
             return five_w
 
-        if any(word in user_lower for word in ['yes', 'agree', 'yep']):
+        if is_agreement(user_lower):
             return random.choice(self.CHALLENGE_PHRASES)
 
-        if any(word in user_lower for word in ['no', 'disagree']):
+        if is_disagreement(user_lower):
             next_stmt = self._get_next_statement()
             if next_stmt:
                 _, statement = next_stmt
@@ -909,10 +890,10 @@ class TeacherPolicy(BasePolicy):
         if '?' in user_input:
             return random.choice(self.TRANSITION_PHRASES) + " " + self._get_explanation()
 
-        if any(word in user_lower for word in ['yes', 'agree', 'understand']):
+        if is_agreement(user_lower):
             return self._reinforce_concept()
 
-        if any(word in user_lower for word in ['no', 'disagree', 'confused']):
+        if is_disagreement(user_lower):
             return self._clarify_misconception()
 
         return self._teach_with_example()
@@ -985,10 +966,10 @@ class DebaterPolicy(BasePolicy):
                 return f"{attack} {counter}"
             return attack
 
-        if any(word in user_lower for word in ['yes', 'agree', 'fine']):
+        if is_agreement(user_lower):
             return random.choice(self.DEFENSE_PHRASES)
 
-        if any(word in user_lower for word in ['no', 'disagree']):
+        if is_disagreement(user_lower):
             next_stmt = self._get_next_statement()
             if next_stmt:
                 _, statement = next_stmt
@@ -1019,10 +1000,10 @@ class MinimalistPolicy(BasePolicy):
         if five_w:
             return five_w[:100] + ("..." if len(five_w) > 100 else "")
 
-        if any(word in user_lower for word in ['yes', 'agree', 'yep']):
+        if is_agreement(user_lower):
             return random.choice(self.BRIEF_AGREE)
 
-        if any(word in user_lower for word in ['no', 'disagree', 'nah']):
+        if is_disagreement(user_lower):
             next_stmt = self._get_next_statement()
             if next_stmt:
                 _, stmt = next_stmt
@@ -1101,8 +1082,7 @@ class AdaptivePolicy(BasePolicy):
         """Track disagreement count and switch policy when threshold hit."""
         if self._switched:
             return
-        lower = user_input.lower()
-        if any(w in lower for w in ("no", "disagree", "wrong", "false")):
+        if is_disagreement(user_input):
             self._consecutive_disagree += 1
         else:
             self._consecutive_disagree = 0
