@@ -30,7 +30,7 @@ from difficult_dialogs.policy import (
     get_policy,
 )
 
-__version__ = "0.5.0"
+from difficult_dialogs.version import __version__
 __all__ = [
     # Exceptions
     "DifficultDialogsError",
