@@ -289,6 +289,52 @@ class Argument:
         
         return arg
     
+    def diff(self, other: Argument) -> dict[str, Any]:
+        """Compare this argument with *other* and return a structured diff.
+
+        Useful for reviewing LLM-generated updates before committing them.
+
+        Args:
+            other: The argument to compare against (typically the updated version).
+
+        Returns:
+            Dictionary with keys:
+            - ``meta``: changes to name/intro/conclusion (field → (old, new)).
+            - ``added_premises``: premise names present in *other* but not here.
+            - ``removed_premises``: premise names present here but not in *other*.
+            - ``modified_premises``: names present in both where statements differ
+              (name → {added_statements, removed_statements}).
+        """
+        meta: dict[str, tuple[str, str]] = {}
+        for field in ("name", "intro", "conclusion"):
+            old_val = getattr(self, field)
+            new_val = getattr(other, field)
+            if old_val != new_val:
+                meta[field] = (old_val, new_val)
+
+        self_names = set(self.premise_names)
+        other_names = set(other.premise_names)
+
+        added_premises = sorted(other_names - self_names)
+        removed_premises = sorted(self_names - other_names)
+
+        modified_premises: dict[str, dict[str, list[str]]] = {}
+        for name in self_names & other_names:
+            old_stmts = {s.text for s in self._premises[name].statements}
+            new_stmts = {s.text for s in other._premises[name].statements}
+            if old_stmts != new_stmts:
+                modified_premises[name] = {
+                    "added_statements": sorted(new_stmts - old_stmts),
+                    "removed_statements": sorted(old_stmts - new_stmts),
+                }
+
+        return {
+            "meta": meta,
+            "added_premises": added_premises,
+            "removed_premises": removed_premises,
+            "modified_premises": modified_premises,
+        }
+
     def __bool__(self) -> bool:
         """Return whether this argument is currently accepted as true."""
         return self.is_true

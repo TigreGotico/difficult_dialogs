@@ -32,8 +32,8 @@ All 10 policy classes + `POLICY_REGISTRY` + `get_policy` now live in `policy.py`
 
 ## Low Value / Exploratory
 
-### 7. `Argument.diff(other)` method
-Compare two versions of the same argument and return added/removed/modified premises and statements. Useful for reviewing LLM-generated updates before committing.
+### ~~7. `Argument.diff(other)` method~~ — DONE
+`Argument.diff(other)` — `arguments.py`. Returns `{meta, added_premises, removed_premises, modified_premises}`.
 
 ### ~~8. `export_to_markdown(argument, path)` function~~ — DONE
 `export_to_markdown(argument, output_path=None)` — `export/markdown.py`. Returns string; writes file when path given.

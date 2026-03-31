@@ -295,3 +295,73 @@ def test_bool_returns_is_true() -> None:
     
     arg.premises[0].statements[0].disagree()
     assert bool(arg) is False
+
+
+# ---------------------------------------------------------------------------
+# Argument.diff()
+# ---------------------------------------------------------------------------
+
+def _make_arg(name: str = "test", intro: str = "I.", conclusion: str = "C.",
+              premises: list[tuple[str, list[str]]] | None = None) -> Argument:
+    arg = Argument(name=name, intro=intro, conclusion=conclusion)
+    for pname, stmts in (premises or []):
+        p = Premise(name=pname)
+        for s in stmts:
+            p.add_statement(s)
+        arg.add_premise(p)
+    return arg
+
+
+def test_diff_no_changes() -> None:
+    """diff returns empty result when arguments are identical."""
+    a = _make_arg(premises=[("p1", ["s1", "s2"])])
+    b = _make_arg(premises=[("p1", ["s1", "s2"])])
+    result = a.diff(b)
+    assert result == {"meta": {}, "added_premises": [], "removed_premises": [], "modified_premises": {}}
+
+
+def test_diff_meta_changes() -> None:
+    """diff reports name/intro/conclusion changes."""
+    a = _make_arg(name="old", intro="Old intro.", conclusion="Old end.")
+    b = _make_arg(name="new", intro="New intro.", conclusion="New end.")
+    result = a.diff(b)
+    assert result["meta"]["name"] == ("old", "new")
+    assert result["meta"]["intro"] == ("Old intro.", "New intro.")
+    assert result["meta"]["conclusion"] == ("Old end.", "New end.")
+
+
+def test_diff_added_premise() -> None:
+    """diff detects premises in other that are absent in self."""
+    a = _make_arg(premises=[("p1", ["s1"])])
+    b = _make_arg(premises=[("p1", ["s1"]), ("p2", ["s2"])])
+    result = a.diff(b)
+    assert result["added_premises"] == ["p2"]
+    assert result["removed_premises"] == []
+
+
+def test_diff_removed_premise() -> None:
+    """diff detects premises in self that are absent in other."""
+    a = _make_arg(premises=[("p1", ["s1"]), ("p2", ["s2"])])
+    b = _make_arg(premises=[("p1", ["s1"])])
+    result = a.diff(b)
+    assert result["removed_premises"] == ["p2"]
+    assert result["added_premises"] == []
+
+
+def test_diff_modified_premise_statements() -> None:
+    """diff reports added/removed statements within a shared premise."""
+    a = _make_arg(premises=[("p1", ["s1", "s2"])])
+    b = _make_arg(premises=[("p1", ["s1", "s3"])])
+    result = a.diff(b)
+    mod = result["modified_premises"]["p1"]
+    assert mod["added_statements"] == ["s3"]
+    assert mod["removed_statements"] == ["s2"]
+
+
+def test_diff_unchanged_premise_not_in_modified() -> None:
+    """Premises with identical statements are not in modified_premises."""
+    a = _make_arg(premises=[("p1", ["s1"]), ("p2", ["s2"])])
+    b = _make_arg(premises=[("p1", ["s1"]), ("p2", ["s2", "s3"])])
+    result = a.diff(b)
+    assert "p1" not in result["modified_premises"]
+    assert "p2" in result["modified_premises"]
