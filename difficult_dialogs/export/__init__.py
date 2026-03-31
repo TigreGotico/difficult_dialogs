@@ -8,6 +8,7 @@ from difficult_dialogs.export.json import (
     export_library_to_json,
     import_from_json,
 )
+from difficult_dialogs.export.markdown import export_to_markdown
 from difficult_dialogs.export.sqlite import (
     LibraryDatabase,
     export_to_sqlite,
@@ -18,6 +19,7 @@ __all__ = [
     "export_to_json",
     "export_library_to_json",
     "import_from_json",
+    "export_to_markdown",
     "LibraryDatabase",
     "export_to_sqlite",
 ]

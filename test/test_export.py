@@ -457,3 +457,79 @@ class TestExportCoverageBranches:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestExportToMarkdown:
+    """Tests for export_to_markdown."""
+
+    def test_basic_structure(self, sample_argument: Argument) -> None:
+        """Markdown contains title, intro, premises, and conclusion."""
+        from difficult_dialogs.export import export_to_markdown
+        md = export_to_markdown(sample_argument)
+        assert "# Test Argument" in md
+        assert "This is a test introduction." in md
+        assert "## Premises" in md
+        assert "## Conclusion" in md
+        assert "This is a test conclusion." in md
+
+    def test_premise_statements_listed(self, sample_argument: Argument) -> None:
+        """Each statement appears as a list item."""
+        from difficult_dialogs.export import export_to_markdown
+        md = export_to_markdown(sample_argument)
+        assert "- Statement 1" in md
+        assert "- Statement 2" in md
+
+    def test_five_ws_included(self) -> None:
+        """Five-Ws fields appear when populated."""
+        from difficult_dialogs.export import export_to_markdown
+        arg = Argument(name="test", intro="I.", conclusion="C.")
+        p = Premise(name="p1")
+        p.add_statement("s1")
+        p.add_what("A thing.")
+        p.add_why("Because.")
+        p.add_how("Like this.")
+        p.add_when("Now.")
+        p.add_where("Here.")
+        arg.add_premise(p)
+        md = export_to_markdown(arg)
+        assert "**What:** A thing." in md
+        assert "**Why:** Because." in md
+        assert "**How:** Like this." in md
+        assert "**When:** Now." in md
+        assert "**Where:** Here." in md
+
+    def test_sources_and_support_included(self) -> None:
+        """Sources and support lines appear in the output."""
+        from difficult_dialogs.export import export_to_markdown
+        arg = Argument(name="test", intro="I.", conclusion="C.")
+        p = Premise(name="p1")
+        p.add_statement("s1")
+        p.add_source("https://example.com")
+        p.add_support("Because reasons.")
+        arg.add_premise(p)
+        md = export_to_markdown(arg)
+        assert "https://example.com" in md
+        assert "Because reasons." in md
+
+    def test_writes_file(self, tmp_path: Path) -> None:
+        """Passing output_path writes the file."""
+        from difficult_dialogs.export import export_to_markdown
+        arg = Argument(name="file test", intro="I.", conclusion="C.")
+        out = tmp_path / "out.md"
+        result = export_to_markdown(arg, out)
+        assert out.exists()
+        assert out.read_text() == result
+
+    def test_no_path_returns_string_only(self, sample_argument: Argument) -> None:
+        """Without output_path, no file is written and a string is returned."""
+        from difficult_dialogs.export import export_to_markdown
+        result = export_to_markdown(sample_argument)
+        assert isinstance(result, str)
+        assert len(result) > 0
+
+    def test_empty_argument(self) -> None:
+        """Minimal argument (no premises) renders without error."""
+        from difficult_dialogs.export import export_to_markdown
+        arg = Argument(name="empty")
+        md = export_to_markdown(arg)
+        assert "# Empty" in md

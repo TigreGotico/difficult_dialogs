@@ -35,8 +35,8 @@ All 10 policy classes + `POLICY_REGISTRY` + `get_policy` now live in `policy.py`
 ### 7. `Argument.diff(other)` method
 Compare two versions of the same argument and return added/removed/modified premises and statements. Useful for reviewing LLM-generated updates before committing.
 
-### 8. `export_to_markdown(argument, path)` function
-Export an argument as a human-readable Markdown document — useful for reviewing generated arguments without loading them into code.
+### ~~8. `export_to_markdown(argument, path)` function~~ — DONE
+`export_to_markdown(argument, output_path=None)` — `export/markdown.py`. Returns string; writes file when path given.
 
 ### 9. Policy streaming via Server-Sent Events
 Add an optional `stream_sse(request)` adapter to `BasePolicy.stream()` so policies can be driven from a web frontend without a WebSocket.
