@@ -671,6 +671,57 @@ enhancer.clear_cache()  # Clear cached rephrasings
 
 ---
 
+### LLMEnhancedPolicy
+
+Wraps any existing policy and rephrases its bot responses via `LLMEnhancer` — `policy.py`.
+
+```python
+from difficult_dialogs.policy import LLMEnhancedPolicy, KnowItAllPolicy
+from difficult_dialogs.llm import LLMEnhancer
+```
+
+#### API
+
+```python
+LLMEnhancedPolicy(
+    argument: Argument,
+    inner_policy: BasePolicy,
+    enhancer: LLMEnhancer,
+    style: str = "conversational",  # "conversational" | "formal" | "friendly" | "academic"
+)
+```
+
+All dialog logic — premise sequencing, agreement tracking, support delivery — is handled by the `inner_policy`. `LLMEnhancedPolicy` intercepts each bot response and calls `enhancer.rephrase(text, style=style)`. If the enhancer fails for any reason (server down, timeout, exception), the original text is returned unchanged.
+
+#### Usage
+
+```python
+from difficult_dialogs import Argument
+from difficult_dialogs.policy import LLMEnhancedPolicy, KnowItAllPolicy
+from difficult_dialogs.llm import LLMEnhancer
+
+arg = Argument.from_directory("arguments/climate_change")
+inner = KnowItAllPolicy(arg)
+enhancer = LLMEnhancer("http://localhost:8000", model="qwen-7b")
+
+policy = LLMEnhancedPolicy(arg, inner, enhancer, style="friendly")
+
+print(policy.start())
+
+gen = policy.run_sync()
+response = next(gen)
+while response:
+    print("BOT:", response)
+    try:
+        response = gen.send(input("USER: "))
+    except StopIteration:
+        break
+```
+
+The session transcript records enhanced (rephrased) text, not the originals.
+
+---
+
 ## Policy System
 
 ### BasePolicy
