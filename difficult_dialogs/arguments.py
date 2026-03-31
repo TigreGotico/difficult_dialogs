@@ -162,7 +162,24 @@ class Argument:
                 self._load_premise(item)
 
         return self
-    
+
+    @classmethod
+    def from_directory(cls, path: str | Path) -> Argument:
+        """Create a new Argument loaded from *path*.
+
+        Equivalent to ``Argument().load(path)`` but more idiomatic.
+
+        Args:
+            path: Path to the argument directory.
+
+        Returns:
+            New Argument instance populated from *path*.
+
+        Raises:
+            ArgumentLoadError: If path doesn't exist or is not a directory.
+        """
+        return cls().load(path)
+
     def _load_premise(self, premise_dir: Path) -> None:
         """Load a single premise from a subdirectory.
 

@@ -64,8 +64,16 @@ def test_load_from_directory() -> None:
     """Load argument from directory structure."""
     arg = Argument()
     arg.load(COGITO_DIR)
-    
+
     assert arg.name == "i think therefore i am"
+
+
+def test_from_directory_classmethod() -> None:
+    """from_directory() is equivalent to Argument().load()."""
+    arg = Argument.from_directory(COGITO_DIR)
+    assert arg.name == "i think therefore i am"
+    assert arg.intro != ""
+    assert len(arg.premises) > 0
     assert arg.intro != ""
     assert arg.conclusion != ""
     assert len(arg.premises) > 0
