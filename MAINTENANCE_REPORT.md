@@ -76,5 +76,17 @@ Audit log of AI-assisted changes to this repository.
    - Added `support` and `five_ws` tables; `get_argument` now restores all fields on load.
    - 2 new tests: `test_support_persisted_in_sqlite`, `test_five_ws_persisted_in_sqlite`.
 
-**Oversight:** Full automated test suite (565 tests) passed after each commit.
+10. **feat: `run_sync`/`stream` delegate to `handle_input`; typed exceptions; dead code removed**
+    (`policy.py`, `exceptions.py`, `arguments.py`, `policies.py`, `__init__.py`)
+    - `run_sync` and `stream` hardcoded KnowItAll-style logic; 5W dispatch and all
+      policy-specific behaviour were bypassed in generator mode.  Rewritten to call
+      `self.handle_input()`.  `run_async()` removed — it was a broken stub.
+      `policy.py` coverage 75% → 94%.
+    - `exceptions.py` was fully orphaned (defined, never raised, never exported).
+      Replaced with four typed exceptions: `ArgumentLoadError`, `ArgumentSaveError`,
+      `InvalidPolicyError`, `MissingStatementError`. All exported from package root.
+    - Dead `Argument.__post_init__` branch removed (`path` is `init=False`, always `None`).
+    - Tests updated to catch new exception types; 6 new tests for `run_sync`/`stream`.
+
+**Oversight:** Full automated test suite (571 tests) passed after each commit.
 Human review required before merging or publishing.
