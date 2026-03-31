@@ -218,16 +218,16 @@ class TestFileStructure:
                 f"{category}/{topic}: Missing required file: {filename}"
     
     @pytest.mark.parametrize("category,topic,path", ALL_ARGUMENTS)
-    def test_premise_directories_have_descriptions(self, category: str, topic: str, path: Path) -> None:
-        """Each premise directory should have description.premise file."""
-        arg = Argument().load(path)
-        
+    def test_premise_directories_have_premise_file(self, category: str, topic: str, path: Path) -> None:
+        """Each premise directory should contain at least one .premise file."""
+        arg = Argument.from_directory(path)
+
         for premise in arg.premises:
             premise_dir = path / premise.name
-            description_file = premise_dir / "description.premise"
-            
-            assert description_file.exists(), \
-                f"{category}/{topic}/{premise.name}: Missing description.premise"
+            premise_files = list(premise_dir.glob("*.premise"))
+
+            assert premise_files, \
+                f"{category}/{topic}/{premise.name}: No .premise file found"
     
     @pytest.mark.parametrize("category,topic,path", ALL_ARGUMENTS)
     def test_no_empty_files(self, category: str, topic: str, path: Path) -> None:

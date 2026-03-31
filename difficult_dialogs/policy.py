@@ -690,15 +690,34 @@ class MaieuticPolicy(BasePolicy):
 
         if is_disagreement:
             templates = self.DISAGREEMENT_QUESTIONS
-        elif is_agreement:
-            templates = self.AGREEMENT_QUESTIONS
-        else:
-            templates = self.INTRO_QUESTIONS
+            template = random.choice(templates)
+            self.question_count += 1
+            return template.format(topic=self.argument.name.replace("_", " "))
 
-        template = random.choice(templates)
-        topic = self.argument.name.replace("_", " ")
-        self.question_count += 1
-        return template.format(topic=topic)
+        if is_agreement:
+            # After agreement, present the next premise statement
+            self.agree()
+            next_stmt = self._get_next_statement()
+            if next_stmt:
+                _, statement = next_stmt
+                return f"{statement}\nDo you agree? (y/n) "
+            self.state.finished = True
+            return str(self.argument.conclusion)
+
+        # Neutral — ask one intro question, then present a statement
+        if self.question_count == 0:
+            template = random.choice(self.INTRO_QUESTIONS)
+            topic = self.argument.name.replace("_", " ")
+            self.question_count += 1
+            return template.format(topic=topic)
+
+        next_stmt = self._get_next_statement()
+        if next_stmt:
+            _, statement = next_stmt
+            self.question_count = 0
+            return f"{statement}\nDo you agree? (y/n) "
+        self.state.finished = True
+        return str(self.argument.conclusion)
 
     def start(self) -> str:
         """Start with an open topic question."""
@@ -875,7 +894,7 @@ class DebaterPolicy(BasePolicy):
             next_stmt = self._get_next_statement()
             if next_stmt:
                 _, statement = next_stmt
-                return f"Exactly! {statement}"
+                return f"Consider this: {statement}"
 
         next_stmt = self._get_next_statement()
         if next_stmt:

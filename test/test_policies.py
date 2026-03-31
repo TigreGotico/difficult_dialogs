@@ -250,12 +250,15 @@ class TestMaieuticPolicyBranches:
         assert response == "What it really means."
 
     def test_question_count_increments(self, sample_argument: Argument) -> None:
-        """question_count tracks each guided question."""
+        """question_count increments for each intro question asked."""
         policy = MaieuticPolicy(sample_argument)
         policy.start()
+        # First neutral input: question_count goes 0→1 (intro question asked)
         policy.handle_input("maybe")
+        assert policy.question_count == 1
+        # Second neutral input: question_count≠0 so presents statement and resets to 0
         policy.handle_input("maybe")
-        assert policy.question_count == 2
+        assert policy.question_count == 0
 
 
 class TestSkepticPolicyBranches:
@@ -350,7 +353,7 @@ class TestDebaterPolicyBranches:
         # "no" is <=10 chars, not 'yes'/'agree'/'fine', matches disagree branch
         response = policy.handle_input("no")
         assert response is not None
-        assert response.startswith("Exactly!")
+        assert response.startswith("Consider this:")
 
     def test_default_presents_next_statement(self, sample_argument: Argument) -> None:
         """Short neutral input with no agree/disagree falls to default branch."""
