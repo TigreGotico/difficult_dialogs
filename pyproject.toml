@@ -44,9 +44,7 @@ dev = [
 cli = [
     "tqdm>=4.65.0",
 ]
-export = [
-    "sqlite3",
-]
+export = []
 web = [
     "streamlit>=1.28.0",
 ]
