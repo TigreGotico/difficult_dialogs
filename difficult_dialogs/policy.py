@@ -27,6 +27,7 @@ class PolicyState:
     current_premise: str | None = None
     user_agrees: bool = True
     finished: bool = False
+    challenge_count: int = 0
 
 
 class BasePolicy(ABC):
@@ -485,8 +486,7 @@ class DebatePolicy(BasePolicy):
             argument: Argument to present.
         """
         super().__init__(argument)
-        self._challenge_count: int = 0
-    
+
     def handle_input(self, user_input: str) -> str | None:
         """Process user input with debate-style responses.
 
@@ -507,14 +507,14 @@ class DebatePolicy(BasePolicy):
         # Handle agreement
         if user_input.startswith(('y', 'yes', 'ok', 'sure', 'agree')):
             self.agree()
-            self._challenge_count = 0
+            self.state.challenge_count = 0
             return self._advance()
-        
+
         # Handle disagreement with active challenging
         elif user_input.startswith(('n', 'no', 'disagree')):
             self.disagree()
             return self._challenge()
-        
+
         # Default: treat as neutral, advance
         self.agree()
         return self._advance()
@@ -532,12 +532,12 @@ class DebatePolicy(BasePolicy):
         
         if support:
             intro = random.choice(self.CHALLENGE_RESPONSES)
-            self._challenge_count += 1
+            self.state.challenge_count += 1
             return f"{intro}{support}\n\nDo you still disagree? (y/n) "
-        
+
         # No specific support - use generic challenge
-        self._challenge_count += 1
-        if self._challenge_count >= 2:
+        self.state.challenge_count += 1
+        if self.state.challenge_count >= 2:
             # After 2 challenges, move on
             self.agree()
             return self._advance() or "I see you're not convinced. Let's continue."

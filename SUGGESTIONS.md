@@ -22,8 +22,8 @@ All 10 policy classes + `POLICY_REGISTRY` + `get_policy` now live in `policy.py`
 ### 4. Add `--dry-run` to `cmd_generate`
 `cmd_generate` requires a live LLM server. A `--dry-run` flag that validates connectivity and prints what would be generated (without calling generate) would make the CLI testable without mocks.
 
-### 5. `PolicyState` should track `challenge_count` per-premise
-`DebatePolicy._challenge_count` is an instance variable set on the policy but semantically belongs to the per-premise dialog state. Moving it to `PolicyState` would make state serializable and resumable.
+### ~~5. `PolicyState` should track `challenge_count` per-premise~~ — DONE
+`PolicyState.challenge_count: int = 0` — `policy.py:29`. `DebatePolicy._challenge_count` removed.
 
 ### ~~6. `Argument.from_directory()` class method~~ — DONE
 `Argument.from_directory(path)` — `arguments.py:167`.
