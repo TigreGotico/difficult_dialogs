@@ -438,3 +438,15 @@ class TestLLMEnhancer:
             "the sky is blue today",
             "the sky was blue today",
         ) is False
+
+    def test_is_too_different_empty_strings(self) -> None:
+        """_is_too_different() returns True when either string is empty."""
+        enhancer = self._make_enhancer()
+        assert enhancer._is_too_different("", "something") is True
+        assert enhancer._is_too_different("something", "") is True
+
+    def test_enhancer_init(self) -> None:
+        """LLMEnhancer.__init__ sets client and cache."""
+        enhancer = LLMEnhancer("http://localhost:8000", model="test-model")
+        assert enhancer.client is not None
+        assert enhancer._cache == {}

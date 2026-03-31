@@ -71,6 +71,59 @@ def test_load_from_directory() -> None:
     assert len(arg.premises) > 0
 
 
+def test_premise_names_property() -> None:
+    """premise_names returns list of all premise name strings."""
+    arg = Argument()
+    arg.add_premise(Premise(name="alpha").add_statement("s1"))
+    arg.add_premise(Premise(name="beta").add_statement("s2"))
+    assert arg.premise_names == ["alpha", "beta"]
+
+
+def test_load_legacy_flat_format(tmp_path: Path) -> None:
+    """_load_legacy_format loads flat-file arguments (no subdirs)."""
+    # Write a legacy-style flat argument directory
+    (tmp_path / "argument.intro").write_text("Legacy intro.")
+    (tmp_path / "argument.conclusion").write_text("Legacy conclusion.")
+    (tmp_path / "first.premise").write_text("Claim one.\nClaim two.")
+    (tmp_path / "first.support").write_text("Fallback support.")
+    (tmp_path / "first.source").write_text("https://example.com")
+    (tmp_path / "first.what").write_text("What it means.")
+    (tmp_path / "first.why").write_text("Why it is true.")
+    (tmp_path / "first.how").write_text("How it works.")
+    (tmp_path / "first.when").write_text("When it applies.")
+    (tmp_path / "first.where").write_text("Where observed.")
+
+    arg = Argument().load(tmp_path)
+
+    assert arg.intro == "Legacy intro."
+    assert arg.conclusion == "Legacy conclusion."
+    assert len(arg.premises) == 1
+
+    p = arg.get_premise("first")
+    assert p is not None
+    assert [str(s) for s in p.statements] == ["Claim one.", "Claim two."]
+    assert p.support == ["Fallback support."]
+    assert p.sources == ["https://example.com"]
+    assert p.what == ["What it means."]
+    assert p.why == ["Why it is true."]
+    assert p.how == ["How it works."]
+    assert p.when == ["When it applies."]
+    assert p.where == ["Where observed."]
+
+
+def test_load_legacy_skips_argument_stem(tmp_path: Path) -> None:
+    """_load_legacy_format ignores files with stem 'argument'."""
+    (tmp_path / "argument.intro").write_text("Intro.")
+    (tmp_path / "argument.conclusion").write_text("Conclusion.")
+    (tmp_path / "real.premise").write_text("Real claim.")
+
+    arg = Argument().load(tmp_path)
+
+    # The 'argument' stem is skipped as a premise
+    assert arg.get_premise("argument") is None
+    assert len(arg.premises) == 1
+
+
 def test_load_nonexistent_directory() -> None:
     """Loading nonexistent directory raises ArgumentLoadError."""
     arg = Argument()
@@ -260,6 +313,7 @@ class TestArgumentSave:
         # Second save with no argument should reuse the path
         arg.save()
         assert (dest / "intro.dialog").exists()
+
 
 
 def test_str_is_name() -> None:
