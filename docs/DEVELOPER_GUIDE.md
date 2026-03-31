@@ -483,27 +483,8 @@ arg = gen.generate(
     language="en"
 )
 
-# Save to disk
-output_dir = Path("arguments/ubi_poverty")
-output_dir.mkdir(parents=True, exist_ok=True)
-
-(output_dir / "intro.dialog").write_text(arg.intro)
-(output_dir / "conclusion.conclusion").write_text(arg.conclusion)
-
-for premise in arg.premises:
-    pdir = output_dir / premise.name
-    pdir.mkdir(exist_ok=True)
-    
-    (pdir / "description.premise").write_text(
-        "\n".join(s.text for s in premise.statements)
-    )
-    
-    if premise.support:
-        (pdir / "support.support").write_text("\n".join(premise.support))
-    
-    if premise.sources:
-        (pdir / "source.source").write_text("\n".join(premise.sources))
-
+# Save to disk — Argument.save() writes the full subdirectory structure
+arg.save("arguments/ubi_poverty")
 print(f"Generated argument with {len(arg.premises)} premises")
 ```
 

@@ -414,7 +414,7 @@ Shall we move on? (y/n)
 After 2 challenges on same point, policy moves on:
 
 ```python
-if self._challenge_count >= 2:
+if self.state.challenge_count >= 2:
     self.agree()  # Force progression
     return self._advance()
 ```

@@ -338,31 +338,9 @@ argument = gen.generate(
     language="en"                    # Language code
 )
 
-# Save to disk
-output_dir = Path("arguments/ev_better")
-output_dir.mkdir(parents=True, exist_ok=True)
-
-(output_dir / "intro.dialog").write_text(argument.intro)
-(output_dir / "conclusion.conclusion").write_text(argument.conclusion)
-
-for premise in argument.premises:
-    pdir = output_dir / premise.name
-    pdir.mkdir(exist_ok=True)
-    
-    # Write statements
-    (pdir / "description.premise").write_text(
-        "\n".join(s.text for s in premise.statements)
-    )
-    
-    # Write support
-    if premise.support:
-        (pdir / "support.support").write_text("\n".join(premise.support))
-    
-    # Write sources
-    if premise.sources:
-        (pdir / "source.source").write_text("\n".join(premise.sources))
-
-print(f"Generated argument saved to {output_dir}")
+# Save to disk — Argument.save() handles all file naming automatically
+argument.save("arguments/ev_better")
+print(f"Generated argument saved to arguments/ev_better")
 ```
 
 ### Generation Parameters
@@ -864,7 +842,7 @@ python examples/generate_argument.py
 Topic: Photosynthesis is essential for life on Earth
 
 # Review and edit generated files
-vim arguments/photosynthesis_essential/*/description.premise
+vim arguments/photosynthesis_essential/*/*.premise
 
 # Deploy in classroom
 python examples/run_argument.py arguments/photosynthesis_essential
