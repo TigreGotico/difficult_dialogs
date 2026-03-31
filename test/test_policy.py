@@ -782,3 +782,74 @@ def test_run_sync_populates_transcript() -> None:
         pass
     user_turns = [e for e in policy.state.transcript if e.role == "user"]
     assert len(user_turns) >= 1
+
+
+# ---------------------------------------------------------------------------
+# PolicyState serialization
+# ---------------------------------------------------------------------------
+
+def test_policy_state_round_trip() -> None:
+    """PolicyState.to_dict() / from_dict() preserves all fields."""
+    from difficult_dialogs.policy import TranscriptEntry
+    state = PolicyState(
+        spoken_premises={"p1", "p2"},
+        spoken_statements={"s1"},
+        current_premise="p2",
+        user_agrees=False,
+        finished=False,
+        challenge_count=2,
+        transcript=[TranscriptEntry(role="bot", text="Hello")],
+    )
+    restored = PolicyState.from_dict(state.to_dict())
+    assert restored.spoken_premises == state.spoken_premises
+    assert restored.spoken_statements == state.spoken_statements
+    assert restored.current_premise == state.current_premise
+    assert restored.user_agrees == state.user_agrees
+    assert restored.finished == state.finished
+    assert restored.challenge_count == state.challenge_count
+    assert len(restored.transcript) == 1
+    assert restored.transcript[0].role == "bot"
+    assert restored.transcript[0].text == "Hello"
+
+
+def test_policy_state_empty_round_trip() -> None:
+    """Default PolicyState survives to_dict/from_dict."""
+    state = PolicyState()
+    restored = PolicyState.from_dict(state.to_dict())
+    assert restored.spoken_premises == set()
+    assert restored.finished is False
+    assert restored.transcript == []
+
+
+def test_restore_state_from_dict() -> None:
+    """restore_state() accepts raw dict and resumes conversation."""
+    policy = KnowItAllPolicy(make_arg())
+    policy.start()
+    policy.respond("yes")
+    snapshot = policy.state.to_dict()
+
+    # New policy instance — restore from snapshot
+    policy2 = KnowItAllPolicy(make_arg())
+    policy2.restore_state(snapshot)
+    assert policy2.state.spoken_premises == policy.state.spoken_premises
+    assert len(policy2.state.transcript) == len(policy.state.transcript)
+
+
+def test_restore_state_from_policy_state() -> None:
+    """restore_state() also accepts a PolicyState object directly."""
+    policy = KnowItAllPolicy(make_arg())
+    policy.start()
+    state_obj = policy.state
+
+    policy2 = KnowItAllPolicy(make_arg())
+    policy2.restore_state(state_obj)
+    assert policy2.state is state_obj
+
+
+def test_transcript_entry_round_trip() -> None:
+    """TranscriptEntry.to_dict/from_dict preserves role and text."""
+    from difficult_dialogs.policy import TranscriptEntry
+    entry = TranscriptEntry(role="user", text="Hello world")
+    restored = TranscriptEntry.from_dict(entry.to_dict())
+    assert restored.role == "user"
+    assert restored.text == "Hello world"

@@ -146,3 +146,44 @@ def test_list_arguments() -> None:
 def test_list_arguments_bad_dir() -> None:
     resp = client.get("/arguments?args_dir=/no/such/path")
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# GET /sessions/{id}/state  &  PUT /sessions/{id}/state
+# ---------------------------------------------------------------------------
+
+def test_get_state_returns_serialised_state() -> None:
+    session_id = client.post("/sessions", json={"argument_path": COGITO_DIR}).json()["session_id"]
+    client.post(f"/sessions/{session_id}/chat", json={"message": "yes"})
+    resp = client.get(f"/sessions/{session_id}/state")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "spoken_premises" in data
+    assert "transcript" in data
+    assert isinstance(data["transcript"], list)
+
+
+def test_restore_state_resumes_session() -> None:
+    """Export state from one session, restore into another, continue chatting."""
+    sid1 = client.post("/sessions", json={"argument_path": COGITO_DIR}).json()["session_id"]
+    client.post(f"/sessions/{sid1}/chat", json={"message": "yes"})
+    state = client.get(f"/sessions/{sid1}/state").json()
+
+    # New session for the same argument — restore snapshot
+    sid2 = client.post("/sessions", json={"argument_path": COGITO_DIR}).json()["session_id"]
+    resp = client.put(f"/sessions/{sid2}/state", json=state)
+    assert resp.status_code == 204
+
+    # The restored session should have the same spoken premises
+    restored = client.get(f"/sessions/{sid2}/state").json()
+    assert set(restored["spoken_premises"]) == set(state["spoken_premises"])
+
+
+def test_get_state_unknown_session() -> None:
+    resp = client.get("/sessions/ghost/state")
+    assert resp.status_code == 404
+
+
+def test_put_state_unknown_session() -> None:
+    resp = client.put("/sessions/ghost/state", json={})
+    assert resp.status_code == 404

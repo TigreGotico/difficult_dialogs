@@ -85,6 +85,17 @@ class SessionResponse(BaseModel):
     transcript: list[TranscriptEntryModel]
 
 
+class StatePayload(BaseModel):
+    """Serialised PolicyState for persistence endpoints."""
+    spoken_premises: list[str] = []
+    spoken_statements: list[str] = []
+    current_premise: str | None = None
+    user_agrees: bool = True
+    finished: bool = False
+    challenge_count: int = 0
+    transcript: list[TranscriptEntryModel] = []
+
+
 class StartResponse(BaseModel):
     """Response to POST /sessions."""
     session_id: str
@@ -209,6 +220,50 @@ def get_session(session_id: str) -> Any:
             for e in state.transcript
         ],
     )
+
+
+@app.get("/sessions/{session_id}/state", response_model=StatePayload)
+def get_state(session_id: str) -> Any:
+    """Export the raw session state for external persistence (e.g. Redis).
+
+    The returned payload can be stored by the caller and later used with
+    ``PUT /sessions/{id}/state`` to resume the session in a new process.
+    """
+    session = _sessions.get(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    d = session.policy.state.to_dict()
+    return StatePayload(
+        spoken_premises=d["spoken_premises"],
+        spoken_statements=d["spoken_statements"],
+        current_premise=d["current_premise"],
+        user_agrees=d["user_agrees"],
+        finished=d["finished"],
+        challenge_count=d["challenge_count"],
+        transcript=[TranscriptEntryModel(**e) for e in d["transcript"]],
+    )
+
+
+@app.put("/sessions/{session_id}/state", status_code=204)
+def restore_state(session_id: str, payload: StatePayload) -> None:
+    """Restore a previously exported state into an existing session.
+
+    Useful when sessions are stored externally (Redis, DB) and the server
+    restarts or the session is transferred to another worker.
+    """
+    session = _sessions.get(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    raw = {
+        "spoken_premises": payload.spoken_premises,
+        "spoken_statements": payload.spoken_statements,
+        "current_premise": payload.current_premise,
+        "user_agrees": payload.user_agrees,
+        "finished": payload.finished,
+        "challenge_count": payload.challenge_count,
+        "transcript": [e.model_dump() for e in payload.transcript],
+    }
+    session.policy.restore_state(raw)
 
 
 @app.delete("/sessions/{session_id}", status_code=204)

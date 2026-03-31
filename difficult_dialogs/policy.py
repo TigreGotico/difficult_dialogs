@@ -25,6 +25,15 @@ class TranscriptEntry:
     role: str   # "bot" or "user"
     text: str
 
+    def to_dict(self) -> dict[str, str]:
+        """Serialise to a plain dict."""
+        return {"role": self.role, "text": self.text}
+
+    @classmethod
+    def from_dict(cls, data: dict[str, str]) -> TranscriptEntry:
+        """Restore from a plain dict."""
+        return cls(role=data["role"], text=data["text"])
+
 
 @dataclass
 class PolicyState:
@@ -36,6 +45,46 @@ class PolicyState:
     finished: bool = False
     challenge_count: int = 0
     transcript: list[TranscriptEntry] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        """Serialise state to a JSON-safe dict for persistence.
+
+        Returns:
+            Dictionary suitable for ``json.dumps`` / storage in Redis, a DB,
+            or any other session store.
+        """
+        return {
+            "spoken_premises": sorted(self.spoken_premises),
+            "spoken_statements": sorted(self.spoken_statements),
+            "current_premise": self.current_premise,
+            "user_agrees": self.user_agrees,
+            "finished": self.finished,
+            "challenge_count": self.challenge_count,
+            "transcript": [e.to_dict() for e in self.transcript],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> PolicyState:
+        """Restore state from a serialised dict.
+
+        Args:
+            data: Dict previously produced by ``to_dict()``.
+
+        Returns:
+            Populated ``PolicyState`` instance.
+        """
+        return cls(
+            spoken_premises=set(data.get("spoken_premises", [])),
+            spoken_statements=set(data.get("spoken_statements", [])),
+            current_premise=data.get("current_premise"),
+            user_agrees=data.get("user_agrees", True),
+            finished=data.get("finished", False),
+            challenge_count=data.get("challenge_count", 0),
+            transcript=[
+                TranscriptEntry.from_dict(e)
+                for e in data.get("transcript", [])
+            ],
+        )
 
 
 class BasePolicy(ABC):
@@ -205,10 +254,25 @@ class BasePolicy(ABC):
 
         return None
 
+    def restore_state(self, state: PolicyState | dict) -> None:
+        """Restore a previously serialised session state.
+
+        Accepts either a :class:`PolicyState` instance or a raw dict
+        (as returned by ``PolicyState.to_dict()``) so callers can load
+        directly from JSON / Redis without a separate deserialisation step.
+
+        Args:
+            state: ``PolicyState`` or ``dict`` to restore from.
+        """
+        if isinstance(state, dict):
+            self.state = PolicyState.from_dict(state)
+        else:
+            self.state = state
+
     def agree(self) -> None:
         """Mark current premise as agreed."""
         self.state.user_agrees = True
-    
+
     def disagree(self) -> None:
         """Mark current premise as disagreed."""
         self.state.user_agrees = False
