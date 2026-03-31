@@ -175,6 +175,47 @@ def test_from_dict_roundtrip() -> None:
     assert "where explanation" in p.where
 
 
+def test_apply_file_premise_extension(tmp_path) -> None:
+    """apply_file() loads statements from a .premise file."""
+    from pathlib import Path
+    f = tmp_path / "p.premise"
+    f.write_text("Claim one.\nClaim two.\n")
+    p = Premise(name="p")
+    p.apply_file(f)
+    assert [str(s) for s in p.statements] == ["Claim one.", "Claim two."]
+
+
+def test_apply_file_five_ws(tmp_path) -> None:
+    """apply_file() loads all Five-Ws extensions."""
+    from pathlib import Path
+    extensions = {
+        ".support": ("add_support", "support"),
+        ".source":  ("add_source",  "sources"),
+        ".what":    ("add_what",    "what"),
+        ".why":     ("add_why",     "why"),
+        ".how":     ("add_how",     "how"),
+        ".when":    ("add_when",    "when"),
+        ".where":   ("add_where",   "where"),
+    }
+    p = Premise(name="test")
+    for ext, (_, attr) in extensions.items():
+        f = tmp_path / f"test{ext}"
+        f.write_text(f"Content for {attr}.")
+        p.apply_file(f)
+        assert getattr(p, attr) == [f"Content for {attr}."]
+
+
+def test_apply_file_ignores_unknown_extension(tmp_path) -> None:
+    """apply_file() silently ignores unknown file extensions."""
+    from pathlib import Path
+    f = tmp_path / "test.unknown"
+    f.write_text("Should be ignored.")
+    p = Premise(name="test")
+    p.apply_file(f)
+    assert p.statements == []
+    assert p.support == []
+
+
 def test_str_is_description() -> None:
     """String representation is description."""
     p = Premise(name="my claim", description="My claim description")

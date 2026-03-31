@@ -5,6 +5,7 @@ A Premise is True if all its statements are True (agreed by user).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from difficult_dialogs.statements import Statement
@@ -123,6 +124,35 @@ class Premise:
             self.where.append(text)
         return self
     
+    def apply_file(self, file: Path) -> None:
+        """Apply the contents of a plain-text file to the appropriate field.
+
+        Reads every non-empty line from *file* and dispatches it to the
+        matching ``add_*`` method based on the file extension.  Unrecognised
+        extensions are silently ignored.
+
+        Args:
+            file: Path to a plain-text premise data file whose extension
+                  determines the target field (e.g. ``.premise``, ``.why``).
+        """
+        content = file.read_text()
+        lines = [ln.strip() for ln in content.strip().split("\n") if ln.strip()]
+
+        _DISPATCH: dict[str, Any] = {
+            ".premise": self.add_statement,
+            ".support": self.add_support,
+            ".source":  self.add_source,
+            ".what":    self.add_what,
+            ".why":     self.add_why,
+            ".how":     self.add_how,
+            ".when":    self.add_when,
+            ".where":   self.add_where,
+        }
+        adder = _DISPATCH.get(file.suffix)
+        if adder is not None:
+            for line in lines:
+                adder(line)
+
     def get_next_statement(self, cache: set[str]) -> Statement | None:
         """Get the next unspoken statement.
         

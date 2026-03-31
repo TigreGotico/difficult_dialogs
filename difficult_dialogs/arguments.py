@@ -163,36 +163,6 @@ class Argument:
 
         return self
     
-    @staticmethod
-    def _apply_file_to_premise(premise: Premise, file: Path) -> None:
-        """Apply a single data file's contents to a premise.
-
-        Reads every non-empty line from *file* and dispatches it to the
-        appropriate ``Premise.add_*`` method based on the file extension.
-        Unrecognised extensions are silently ignored.
-
-        Args:
-            premise: The premise to populate.
-            file: A plain-text file whose extension determines the field.
-        """
-        content = file.read_text()
-        lines = [ln.strip() for ln in content.strip().split("\n") if ln.strip()]
-
-        _DISPATCH = {
-            ".premise": premise.add_statement,
-            ".support": premise.add_support,
-            ".source": premise.add_source,
-            ".what": premise.add_what,
-            ".why": premise.add_why,
-            ".how": premise.add_how,
-            ".when": premise.add_when,
-            ".where": premise.add_where,
-        }
-        adder = _DISPATCH.get(file.suffix)
-        if adder is not None:
-            for line in lines:
-                adder(line)
-
     def _load_premise(self, premise_dir: Path) -> None:
         """Load a single premise from a subdirectory.
 
@@ -203,7 +173,7 @@ class Argument:
 
         for file in premise_dir.iterdir():
             if file.is_file():
-                self._apply_file_to_premise(premise, file)
+                premise.apply_file(file)
 
         if premise.is_complete:
             self.add_premise(premise)
