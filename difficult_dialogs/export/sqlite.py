@@ -177,11 +177,17 @@ class LibraryDatabase:
         return arg_id
 
     def _get_argument_id(self, name: str) -> int:
-        """Get argument ID by name."""
+        """Get argument ID by name.
+
+        Raises:
+            KeyError: If argument name is not in the database.
+        """
         cursor = self.conn.cursor()
         cursor.execute("SELECT id FROM arguments WHERE name = ?", (name,))
         row = cursor.fetchone()
-        return row["id"] if row else 0
+        if not row:
+            raise KeyError(f"Argument not found in database: {name!r}")
+        return row["id"]
 
     def add_validation_result(
         self, argument_name: str, score: float, passed: bool, issues_count: int

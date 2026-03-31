@@ -202,14 +202,6 @@ class ArgumentValidator:
                                f"Premise '{premise.name}' has brief description",
                                "premises")
         
-        # Check for duplicate premise names
-        duplicate_names = [name for name in premise_names 
-                          if premise_names.count(name) > 1]
-        if duplicate_names:
-            result.add_issue(ValidationSeverity.ERROR,
-                           f"Duplicate premise names: {set(duplicate_names)}",
-                           "premises")
-    
     def _validate_content_quality(self, argument: Argument,
                                   result: ValidationResult) -> None:
         """Validate content quality metrics."""

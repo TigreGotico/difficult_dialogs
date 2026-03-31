@@ -61,7 +61,7 @@ class BasePolicy(ABC):
         Returns:
             Response text, or None to wait for more input.
         """
-        pass
+        raise NotImplementedError
     
     def start(self) -> str:
         """Start the dialog and return intro statement.

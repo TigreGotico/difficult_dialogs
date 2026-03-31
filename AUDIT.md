@@ -6,28 +6,18 @@ Known issues, technical debt, and security notes. All citations include `file.py
 
 ## Open Issues
 
-### `export.py:123-124` — load warning silently swallowed
+### `export/json.py:117-118` — load warning silently swallowed
 `export_library_to_json` catches all exceptions and prints a warning instead of propagating. Bad arguments are silently skipped with no way for callers to detect partial failures.
-- **Severity**: Low
-- **File**: `difficult_dialogs/export.py:123`
+- **Severity**: Low (intentional bulk-export design; callers can inspect returned bundle)
+- **File**: `difficult_dialogs/export/json.py:117`
 
-### `export.py:365-368` — `_get_argument_id` returns 0 on miss
-When an argument name is not found, `_get_argument_id` returns `0`. Callers that use the return value as a database key will silently associate data with a non-existent row.
-- **Severity**: Medium
-- **File**: `difficult_dialogs/export.py:365`
+~~`export/sqlite.py` — `_get_argument_id` returns 0 on miss~~ — resolved: now raises `KeyError`.
 
-### `validators.py:209` — unreachable duplicate-premise-name branch
-`_validate_premises` checks for duplicate names in `premise_names` list, but `_premises` is a dict — keys are unique by construction. The duplicate check can never fire unless `_premises` is mutated directly.
-- **Severity**: Low (dead code)
-- **File**: `difficult_dialogs/validators.py:205`
+~~`validators.py:209` — unreachable duplicate-premise-name branch~~ — resolved: dead code removed.
 
-### `arguments.py:207` — dead `continue` in `_load_legacy_format` (removed)
-Legacy format was dropped in refactor. No longer present.
+~~`arguments.py:207` — dead `continue` in `_load_legacy_format`~~ — resolved: legacy format removed.
 
-### `policy.py:58` — abstract method body is `pass`
-`BasePolicy.handle_input` uses `pass` instead of `raise NotImplementedError`. Subclasses that forget to implement it will silently return `None` instead of raising.
-- **Severity**: Low
-- **File**: `difficult_dialogs/policy.py:58`
+~~`policy.py:58` — abstract method body is `pass`~~ — resolved: now raises `NotImplementedError`.
 
 ---
 
