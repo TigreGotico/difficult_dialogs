@@ -1,7 +1,7 @@
 # Dialog Policies Guide
 
-**Version:** 0.4.0  
-**Last Updated:** 2026-03-30
+**Version:** 0.5.0
+**Last Updated:** 2026-03-31
 
 ---
 
@@ -15,6 +15,11 @@
    - [SocraticPolicy](#socraticpolicy)
    - [DebatePolicy](#debatepolicy)
    - [ExploratoryPolicy](#exploratorypolicy)
+   - [MaieuticPolicy](#maieuticpolicy)
+   - [SkepticPolicy](#skepticpolicy)
+   - [TeacherPolicy](#teacherpolicy)
+   - [DebaterPolicy](#debaterpolicy)
+   - [MinimalistPolicy](#minimalistpolicy)
 4. [Policy Comparison Matrix](#policy-comparison-matrix)
 5. [When to Use Each Policy](#when-to-use-each-policy)
 6. [Creating Custom Policies](#creating-custom-policies)
@@ -41,8 +46,7 @@ The same argument can feel completely different depending on the policy used. Th
 ```python
 from difficult_dialogs import Argument, KnowItAllPolicy, SocraticPolicy
 
-arg = Argument()
-arg.load("examples/sample_arguments/health/exercise_improves_mental_health")
+arg = Argument.from_directory("examples/sample_arguments/health/regular_exercise_improves_mental_health")
 
 # Same argument, different experience
 know_it_all = KnowItAllPolicy(arg)    # Provides evidence when you disagree
@@ -71,16 +75,11 @@ class BasePolicy(ABC):
     @abstractmethod
     def handle_input(self, user_input: str) -> str | None:
         """Process user input and return response."""
-        pass
-    
+        raise NotImplementedError
+
     def start(self) -> str:
         """Return intro statement."""
         return str(self.argument.intro)
-    
-    def end(self) -> str:
-        """Return conclusion."""
-        self.state.finished = True
-        return str(self.argument.conclusion)
 ```
 
 ### State Management
@@ -95,6 +94,7 @@ class PolicyState:
     current_premise: str | None = None
     user_agrees: bool = True
     finished: bool = False
+    challenge_count: int = 0
 ```
 
 This stateful design allows policies to make intelligent decisions based on conversation history.
@@ -534,6 +534,71 @@ We may see this differently, and that's okay.
 - **Complexity:** O(1) for all operations
 - **State usage:** Standard tracking only
 - **Framing:** Always presents support as "perspectives" not "facts"
+
+---
+
+### MaieuticPolicy
+
+**Guided discovery - asks one question before presenting each statement**
+
+Rooted in the Socratic maieutic method. Asks one opening question per premise, then presents the statement after any response, allowing the conversation to naturally progress.
+
+#### When to Use
+
+✅ **Ideal for:** Reflective learning, guided self-discovery, philosophy education
+❌ **Avoid when:** Users want direct answers or time is limited
+
+---
+
+### SkepticPolicy
+
+**Doubt-first - challenges every claim before accepting it**
+
+Presents statements and immediately follows with a skeptical challenge, prompting users to defend their agreement. Moves on after the challenge regardless of response.
+
+#### When to Use
+
+✅ **Ideal for:** Critical thinking training, testing conviction, rigorous argument validation
+❌ **Avoid when:** Building supportive or low-friction experiences
+
+---
+
+### TeacherPolicy
+
+**Pedagogical - explains with context and checks for understanding**
+
+Frames statements as lessons, offers support as elaboration, and asks check-for-understanding questions. Progresses only after the learner confirms understanding.
+
+#### When to Use
+
+✅ **Ideal for:** E-learning, compliance training, onboarding
+❌ **Avoid when:** Users are domain experts who don't need scaffolding
+
+---
+
+### DebaterPolicy
+
+**Adversarial counterpart - mirrors DebatePolicy with different framing**
+
+Similar to `DebatePolicy` but uses `"Consider this: {statement}"` when countering disagreement, keeping a slightly less confrontational tone while still pushing back.
+
+#### When to Use
+
+✅ **Ideal for:** Structured debate practice, argument stress-testing
+❌ **Avoid when:** Sensitive topics or fragile user confidence
+
+---
+
+### MinimalistPolicy
+
+**Terse mode - advances regardless of agreement**
+
+Ignores agreement/disagreement signals and simply advances through all statements in order. Shortest possible responses, no persuasion attempts.
+
+#### When to Use
+
+✅ **Ideal for:** Rapid review, automated testing, scripted demos
+❌ **Avoid when:** User engagement or persuasion is the goal
 
 ---
 
@@ -1027,6 +1092,6 @@ def handle_input(self, user_input):
 ---
 
 *This guide is part of the difficult-dialogs documentation suite. See also:*
-- *USER_GUIDE.md - End-user documentation*
-- *DEVELOPER_GUIDE.md - API reference and development guide*
-- *WHITEPAPER.md - Technical architecture and vision*
+- *[USER_GUIDE.md](USER_GUIDE.md) — End-user documentation*
+- *[DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md) — API reference and development guide*
+- *[argument-format.md](argument-format.md) — File format reference*

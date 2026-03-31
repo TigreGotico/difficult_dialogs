@@ -1,6 +1,6 @@
 # Difficult Dialogs - Developer API Reference
 
-**Version:** 0.4.0  
+**Version:** 0.5.0
 **For:** Python developers building on Difficult Dialogs
 
 ---
@@ -53,16 +53,24 @@
 ```
 difficult_dialogs/
 ├── __init__.py          # Public API exports
+├── version.py           # OVOS version block + __version__
 ├── statements.py        # Statement dataclass
-├── premises.py         # Premise dataclass
-├── arguments.py        # Argument class + file I/O
-├── policy.py           # Policy ABC + implementations
-├── exceptions.py       # Custom exceptions
+├── premises.py          # Premise dataclass
+├── arguments.py         # Argument class + file I/O
+├── policy.py            # Policy ABC + 10 concrete implementations
+├── policies.py          # POLICY_REGISTRY helpers
+├── validators.py        # Argument validation utilities
+├── cli.py               # CLI entry point (dd / difficult-dialogs)
+├── exceptions.py        # Custom exceptions
+├── export/
+│   ├── __init__.py
+│   ├── json.py          # JSON export
+│   ├── sqlite.py        # SQLite export
+│   └── markdown.py      # Markdown export
 └── llm/
     ├── __init__.py
-    ├── client.py       # HTTP client for LLM APIs
-    ├── generator.py    # Argument generation
-    └── enhancer.py     # Runtime enhancement
+    ├── client.py        # HTTP client for LLM APIs
+    └── generator.py     # Argument generation
 ```
 
 ---
@@ -610,10 +618,7 @@ class BasePolicy(ABC):
     
     def start(self) -> str:
         """Start dialog, return intro."""
-    
-    def end(self) -> str:
-        """End dialog, return conclusion."""
-    
+
     def agree(self) -> None:
         """Mark current premise as agreed."""
     
@@ -717,8 +722,10 @@ arg.load(Path("arguments/lecture"))
 
 policy = SilentPolicy(arg)
 
-for statement in policy.run_sync():
-    print(statement)
+while not policy.state.finished:
+    response = policy.handle_input("")
+    if response:
+        print(response)
 ```
 
 ---
@@ -748,19 +755,16 @@ async def stream_dialog(policy: BasePolicy) -> AsyncGenerator[str, None]:
 
 ```python
 from difficult_dialogs.arguments import Argument
-from FileNotFoundError import FileNotFoundError
+from difficult_dialogs.exceptions import ArgumentLoadError
 
 arg = Argument()
 
 try:
     arg.load("/nonexistent/path")
-except FileNotFoundError as e:
-    print(f"Path not found: {e}")
-except ValueError as e:
-    print(f"Invalid path: {e}")
+except ArgumentLoadError as e:
+    print(f"Could not load argument: {e}")
 
 from difficult_dialogs.llm.generator import ArgumentGenerator
-from difficult_dialogs.llm.client import URLError
 
 gen = ArgumentGenerator("http://invalid-url:8000")
 
@@ -799,13 +803,13 @@ def test_argument_creation():
 def test_argument_loading():
     arg = Argument()
     arg.load(Path("examples/i_think_therefore_i_am"))
-    
+
     assert arg.is_complete
     assert len(arg.premises) > 0
 
 def test_policy_dialog():
     arg = Argument()
-    arg.load(Path("examples/test_argument"))
+    arg.load(Path("examples/i_think_therefore_i_am"))
     
     policy = KnowItAllPolicy(arg)
     intro = policy.start()
@@ -816,18 +820,16 @@ def test_policy_dialog():
     response = policy.handle_input("yes")
     assert response is not None
 
-@pytest.mark.asyncio
-async def test_async_policy():
+def test_sync_policy():
     arg = Argument()
-    arg.load(Path("examples/test_argument"))
-    
+    arg.load(Path("examples/i_think_therefore_i_am"))
+
     policy = KnowItAllPolicy(arg)
-    
-    responses = []
-    async for response in policy.run_async():
-        responses.append(response)
-    
-    assert len(responses) > 0
+    policy.start()
+
+    gen = policy.run_sync()
+    response = next(gen)
+    assert response is not None
 ```
 
 ---
@@ -838,24 +840,20 @@ async def test_async_policy():
 
 ```bash
 # Clone repository
-git clone https://github.com/JarbasAl/difficult_dialogs
+git clone https://github.com/TigreGotico/difficult_dialogs
 cd difficult_dialogs
 
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate
-
 # Install dev dependencies
-pip install -e ".[dev]"
+uv pip install -e ".[dev]"
 
 # Run tests
-pytest test/ -v
+uv run pytest test/ -v
 
 # Type checking
-mypy difficult_dialogs/ --strict
+uv run mypy difficult_dialogs/
 
 # Linting
-ruff check difficult_dialogs/ test/
+uv run ruff check difficult_dialogs/ test/
 ```
 
 ### Code Style
@@ -888,7 +886,7 @@ Use GitHub Issues with:
 
 - **Documentation:** `/docs/` directory
 - **API Reference:** This document
-- **Issues:** https://github.com/JarbasAl/difficult_dialogs/issues
-- **Discussions:** https://github.com/JarbasAl/difficult_dialogs/discussions
+- **Issues:** https://github.com/TigreGotico/difficult_dialogs/issues
+- **Discussions:** https://github.com/TigreGotico/difficult_dialogs/discussions
 
 Happy coding!

@@ -1,7 +1,7 @@
 # Difficult Dialogs - Complete User Guide
 
-**Version:** 0.4.0  
-**Last Updated:** 2026-03-30
+**Version:** 0.5.0
+**Last Updated:** 2026-03-31
 
 ---
 
@@ -89,9 +89,9 @@ pip install difficult-dialogs
 ### Install from Source
 
 ```bash
-git clone https://github.com/JarbasAl/difficult_dialogs
+git clone https://github.com/TigreGotico/difficult_dialogs
 cd difficult_dialogs
-pip install -e .
+uv pip install -e .
 ```
 
 ### Verify Installation
@@ -825,8 +825,8 @@ policy.start()  # Resets the cache
 ### Getting Help
 
 - **Documentation:** `/docs/` directory
-- **Issues:** https://github.com/JarbasAl/difficult_dialogs/issues
-- **Discussions:** https://github.com/JarbasAl/difficult_dialogs/discussions
+- **Issues:** https://github.com/TigreGotico/difficult_dialogs/issues
+- **Discussions:** https://github.com/TigreGotico/difficult_dialogs/discussions
 
 ---
 
@@ -909,7 +909,7 @@ languages = ["en", "es", "fr", "de", "zh"]
 
 for lang in languages:
     arg = gen.generate(
-        topic="Exercise improves mental health",
+        topic="Regular exercise improves mental health",
         language=lang
     )
     arg.save(f"arguments/exercise_mental_{lang}")
@@ -948,8 +948,7 @@ arg_b.save("arguments/charity_logical")
 Now that you've mastered the basics:
 
 1. **Read the Developer Guide** (`docs/DEVELOPER_GUIDE.md`) for API details
-2. **Study the Whitepaper** (`WHITEPAPER.md`) for architecture and use cases
-3. **Explore Examples** (`examples/` directory) for working code
-4. **Join Discussions** on GitHub to share your use cases
+2. **Explore Examples** (`examples/` directory) for working code
+3. **Join Discussions** on GitHub to share your use cases
 
 Happy debating!

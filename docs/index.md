@@ -49,10 +49,15 @@ arg = Argument.from_directory("path/to/my_argument")
 policy = KnowItAllPolicy(arg)
 
 print(policy.start())
-for response in policy.run_sync():
+
+gen = policy.run_sync()
+response = next(gen)
+while response:
     print("BOT:", response)
-    user_input = input("USER: ")
-    policy.run_sync().send(user_input)
+    try:
+        response = gen.send(input("USER: "))
+    except StopIteration:
+        break
 ```
 
 ## Export
