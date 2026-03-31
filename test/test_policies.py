@@ -229,5 +229,163 @@ class TestPolicyRegistry:
         assert "Available:" in str(exc_info.value)
 
 
+class TestMaieuticPolicyBranches:
+    """Cover neutral-input and 5W dispatch branches in MaieuticPolicy."""
+
+    def test_neutral_input_uses_intro_questions(self, sample_argument: Argument) -> None:
+        """Input that is neither agree nor disagree falls to INTRO_QUESTIONS."""
+        policy = MaieuticPolicy(sample_argument)
+        policy.start()
+        response = policy.handle_input("maybe")
+        assert response is not None
+        assert "?" in response
+
+    def test_five_w_returned_directly(self, sample_argument: Argument) -> None:
+        """5W question bypasses guided-discovery logic when a premise is active."""
+        sample_argument.premises[0].add_what("What it really means.")
+        policy = MaieuticPolicy(sample_argument)
+        policy.start()
+        policy.state.current_premise = sample_argument.premises[0].name
+        response = policy.handle_input("what does this mean")
+        assert response == "What it really means."
+
+    def test_question_count_increments(self, sample_argument: Argument) -> None:
+        """question_count tracks each guided question."""
+        policy = MaieuticPolicy(sample_argument)
+        policy.start()
+        policy.handle_input("maybe")
+        policy.handle_input("maybe")
+        assert policy.question_count == 2
+
+
+class TestSkepticPolicyBranches:
+    """Cover counter-argument and default skepticism branches."""
+
+    def test_disagree_triggers_counter_premise(self, sample_argument: Argument) -> None:
+        """Disagreement returns a counter-premise statement."""
+        policy = SkepticPolicy(sample_argument)
+        response = policy.handle_input("no")
+        assert response is not None
+        # Should include one of the COUNTER_PHRASES prefix (each ends with ": " or " ")
+        assert any(phrase.rstrip() in response for phrase in SkepticPolicy.COUNTER_PHRASES)
+
+    def test_default_skepticism(self, sample_argument: Argument) -> None:
+        """Neutral input falls to default skepticism message."""
+        policy = SkepticPolicy(sample_argument)
+        response = policy.handle_input("perhaps")
+        assert response == "I need more convincing. What specific evidence can you provide?"
+
+    def test_five_w_bypasses_challenge(self, sample_argument: Argument) -> None:
+        """5W question is answered before challenge logic when a premise is active."""
+        sample_argument.premises[0].add_why("Because the logic is sound.")
+        policy = SkepticPolicy(sample_argument)
+        policy.state.current_premise = sample_argument.premises[0].name
+        response = policy.handle_input("why is that true")
+        assert response == "Because the logic is sound."
+
+
+class TestTeacherPolicyBranches:
+    """Cover _teach_with_example and default paths."""
+
+    def test_teach_with_example_default_path(self, sample_argument: Argument) -> None:
+        """Neutral input triggers _teach_with_example with a statement."""
+        policy = TeacherPolicy(sample_argument)
+        response = policy.handle_input("okay")
+        assert response is not None
+        assert any(intro in response for intro in TeacherPolicy.EXAMPLE_INTROS)
+
+    def test_teach_with_example_fallback_to_conclusion(self) -> None:
+        """_teach_with_example returns conclusion when no statements remain."""
+        arg = Argument(name="test", intro="I.", conclusion="The end.")
+        p = Premise(name="p1")
+        p.add_statement("s1")
+        arg.add_premise(p)
+        policy = TeacherPolicy(arg)
+        # Exhaust all statements
+        policy.state.spoken_statements.add("s1")
+        policy.state.spoken_premises.add("p1")
+        response = policy.handle_input("okay")
+        assert response == "The end."
+
+    def test_clarify_misconception_fallback(self) -> None:
+        """_clarify_misconception returns rephrase message when no statements remain."""
+        arg = Argument(name="test", intro="I.", conclusion="C.")
+        p = Premise(name="p1")
+        p.add_statement("s1")
+        arg.add_premise(p)
+        policy = TeacherPolicy(arg)
+        policy.state.spoken_statements.add("s1")
+        policy.state.spoken_premises.add("p1")
+        response = policy.handle_input("no I'm confused")
+        assert response == "Let me rephrase that more clearly."
+
+
+class TestDebaterPolicyBranches:
+    """Cover disagree double-down and default present-argument paths."""
+
+    def test_disagree_doubles_down(self, sample_argument: Argument) -> None:
+        """Short 'no' input triggers double-down with next statement."""
+        policy = DebaterPolicy(sample_argument)
+        # "no" is <=10 chars, not 'yes'/'agree'/'fine', matches disagree branch
+        response = policy.handle_input("no")
+        assert response is not None
+        assert response.startswith("Exactly!")
+
+    def test_default_presents_next_statement(self, sample_argument: Argument) -> None:
+        """Short neutral input with no agree/disagree falls to default branch."""
+        policy = DebaterPolicy(sample_argument)
+        # Short input (<=10 chars) that is neither agree nor disagree
+        response = policy.handle_input("ok then")
+        assert response is not None
+
+    def test_attack_without_next_statement(self) -> None:
+        """Attack-only path when all statements exhausted."""
+        arg = Argument(name="test", intro="I.", conclusion="C.")
+        p = Premise(name="p1")
+        p.add_statement("s1")
+        arg.add_premise(p)
+        policy = DebaterPolicy(arg)
+        policy.state.spoken_statements.add("s1")
+        policy.state.spoken_premises.add("p1")
+        # Long input triggers attack branch
+        response = policy.handle_input("I think this argument is certainly true")
+        assert response in DebaterPolicy.ATTACK_PHRASES
+
+
+class TestMinimalistPolicyBranches:
+    """Cover no-next-statement disagree and default present-statement paths."""
+
+    def test_disagree_no_statements_returns_brief_disagree(self) -> None:
+        """Disagreement with no remaining statements returns BRIEF_DISAGREE."""
+        arg = Argument(name="test", intro="I.", conclusion="C.")
+        p = Premise(name="p1")
+        p.add_statement("s1")
+        arg.add_premise(p)
+        policy = MinimalistPolicy(arg)
+        policy.state.spoken_statements.add("s1")
+        policy.state.spoken_premises.add("p1")
+        response = policy.handle_input("no")
+        assert response in MinimalistPolicy.BRIEF_DISAGREE
+
+    def test_default_presents_statement_truncated(self, sample_argument: Argument) -> None:
+        """Neutral input presents next statement (truncated at 100 chars)."""
+        policy = MinimalistPolicy(sample_argument)
+        response = policy.handle_input("hmm")
+        assert response is not None
+        assert len(response) <= 103  # 100 chars + "..."
+
+    def test_default_falls_to_conclusion_when_exhausted(self) -> None:
+        """Default path returns conclusion when all statements spoken."""
+        arg = Argument(name="test", intro="I.", conclusion="Short end.")
+        p = Premise(name="p1")
+        p.add_statement("s1")
+        arg.add_premise(p)
+        policy = MinimalistPolicy(arg)
+        policy.state.spoken_statements.add("s1")
+        policy.state.spoken_premises.add("p1")
+        response = policy.handle_input("hmm")
+        assert response == "Short end."
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
