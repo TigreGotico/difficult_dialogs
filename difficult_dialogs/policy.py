@@ -248,6 +248,7 @@ class BasePolicy(ABC):
             ("how", premise.how),
             ("when", premise.when),
             ("where", premise.where),
+            ("who", premise.who),
         ):
             if keyword in user_input and items:
                 return random.choice(items)

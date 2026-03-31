@@ -36,7 +36,8 @@ my_argument/
     ├── premise_name.why
     ├── premise_name.how
     ├── premise_name.when
-    └── premise_name.where
+    ├── premise_name.where
+    └── premise_name.who
 ```
 
 ## Quick start

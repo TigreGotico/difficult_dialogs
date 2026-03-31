@@ -17,7 +17,8 @@ argument_name/
     ├── premise_name.why      # Optional. Answer to "why?"
     ├── premise_name.how      # Optional. Answer to "how?"
     ├── premise_name.when     # Optional. Answer to "when?"
-    └── premise_name.where    # Optional. Answer to "where?"
+    ├── premise_name.where    # Optional. Answer to "where?"
+    └── premise_name.who      # Optional. Answer to "who?" (who is affected / who are the authorities)
 ```
 
 The subdirectory name is the premise identifier. All files inside must share
@@ -64,10 +65,11 @@ https://climate.nasa.gov/evidence/
 All lines concatenated into a single string. Spoken at the start and end of
 the session via `BasePolicy.start()` and when `PolicyState.finished` is set.
 
-### `.what`, `.why`, `.how`, `.when`, `.where`
+### `.what`, `.why`, `.how`, `.when`, `.where`, `.who`
 
-Lines loaded as Five-Ws explanations. Policies that implement `_check_five_w()`
-detect these keywords in the user's utterance and return the matching text.
+Lines loaded as contextual explanation fields (the "Five Ws + How").  Policies
+that implement `_check_five_w()` detect these keywords in the user's utterance
+and return a random matching line from the current premise.
 
 ## Example — `i_think_therefore_i_am/`
 

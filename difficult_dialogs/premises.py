@@ -40,6 +40,7 @@ class Premise:
     how: list[str] = field(default_factory=list)
     when: list[str] = field(default_factory=list)
     where: list[str] = field(default_factory=list)
+    who: list[str] = field(default_factory=list)
     
     def __post_init__(self) -> None:
         """Set description from name if not provided."""
@@ -123,7 +124,13 @@ class Premise:
         if text not in self.where:
             self.where.append(text)
         return self
-    
+
+    def add_who(self, text: str) -> Premise:
+        """Add information about who is affected or who the authorities are."""
+        if text not in self.who:
+            self.who.append(text)
+        return self
+
     def apply_file(self, file: Path) -> None:
         """Apply the contents of a plain-text file to the appropriate field.
 
@@ -147,6 +154,7 @@ class Premise:
             ".how":     self.add_how,
             ".when":    self.add_when,
             ".where":   self.add_where,
+            ".who":     self.add_who,
         }
         adder = _DISPATCH.get(file.suffix)
         if adder is not None:
@@ -194,6 +202,7 @@ class Premise:
             "how": self.how.copy(),
             "when": self.when.copy(),
             "where": self.where.copy(),
+            "who": self.who.copy(),
             "is_true": self.is_true,
         }
     
@@ -235,7 +244,10 @@ class Premise:
         
         for text in data.get("where", []):
             premise.add_where(text)
-        
+
+        for text in data.get("who", []):
+            premise.add_who(text)
+
         return premise
     
     def __bool__(self) -> bool:

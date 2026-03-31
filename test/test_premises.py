@@ -1,5 +1,17 @@
 """Unit tests for difficult_dialogs.premises.Premise."""
+import pytest
+from pathlib import Path
+from difficult_dialogs.arguments import Argument
 from difficult_dialogs.premises import Premise
+
+
+@pytest.fixture
+def sample_arg() -> Argument:
+    arg = Argument(name="test", intro="I.", conclusion="C.")
+    p = Premise(name="p1")
+    p.add_statement("s1")
+    arg.add_premise(p)
+    return arg
 
 
 def test_default_true() -> None:
@@ -220,3 +232,39 @@ def test_str_is_description() -> None:
     """String representation is description."""
     p = Premise(name="my claim", description="My claim description")
     assert str(p) == "My claim description"
+
+
+def test_add_who() -> None:
+    """add_who() populates the who list."""
+    p = Premise(name="test")
+    p.add_who("Scientists and public health officials")
+    assert "Scientists and public health officials" in p.who
+
+
+def test_who_round_trip_dict() -> None:
+    """who field survives to_dict / from_dict."""
+    p = Premise(name="test")
+    p.add_who("Everyone")
+    p2 = Premise.from_dict(p.to_dict())
+    assert p2.who == ["Everyone"]
+
+
+def test_who_loaded_from_file(tmp_path: Path) -> None:
+    """apply_file dispatches .who extension to add_who."""
+    who_file = tmp_path / "p.who"
+    who_file.write_text("Affected parties\nExperts\n")
+    p = Premise(name="p")
+    p.apply_file(who_file)
+    assert p.who == ["Affected parties", "Experts"]
+
+
+def test_check_five_w_who(sample_arg: Argument) -> None:
+    """_check_five_w returns who answer when 'who' is in user input."""
+    from difficult_dialogs.policy import KnowItAllPolicy
+    premise = sample_arg.premises[0]
+    premise.add_who("All citizens")
+    policy = KnowItAllPolicy(sample_arg)
+    policy.start()
+    policy.state.current_premise = premise.name
+    response = policy.handle_input("who is affected by this")
+    assert response == "All citizens"
