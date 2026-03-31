@@ -2,7 +2,7 @@
 
 **Compile LLM knowledge into portable, deterministic debate modules.**
 
-[![Tests](https://img.shields.io/badge/tests-704%20passed-green)]()
+[![Tests](https://img.shields.io/badge/tests-678%20passed-brightgreen)]()
 [![Type Checked](https://img.shields.io/badge/mypy-strict-blue)]()
 [![Linting](https://img.shields.io/badge/ruff-passed-green)]()
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)]()
@@ -95,7 +95,7 @@ Opens at `http://localhost:8501` with beautiful UI for browsing and debating.
 
 ### ✅ Quality Assurance
 
-- **704 automated tests** (100% pass rate)
+- **678 automated tests** (100% pass rate)
 - **Validation framework** with scoring (0.0-1.0)
 - **Quality labels**: Excellent ⭐, Good 👍, Fair 😐, Poor ❌
 - **All 32 sample arguments**: Excellent quality (1.00 avg score)
@@ -162,7 +162,7 @@ difficult-dialogs export examples/sample_arguments library.json --no-validation
 difficult-dialogs debate examples/sample_arguments/science/space_exploration
 
 # Or use short alias
-dd debate examples/sample_arguments/health/exercise_improves_mental_health
+dd debate examples/sample_arguments/health/regular_exercise_improves_mental_health
 ```
 
 ### List Available
@@ -358,9 +358,9 @@ pip install difficult-dialogs[all]
 ### From Source
 
 ```bash
-git clone https://github.com/JarbasAl/difficult_dialogs
+git clone https://github.com/TigreGotico/difficult_dialogs
 cd difficult_dialogs
-pip install -e ".[dev]"
+uv pip install -e ".[dev]"
 ```
 
 ---
@@ -369,18 +369,18 @@ pip install -e ".[dev]"
 
 ```bash
 # Run all tests
-pytest test/ -v
+uv run pytest test/ -v
 
 # With coverage
-pytest test/ --cov=difficult_dialogs --cov-report=html
+uv run pytest test/ --cov=difficult_dialogs --cov-report=html
 
 # Specific test categories
-pytest test/test_cli.py -v
-pytest test/test_validators.py -v
-pytest test/test_export.py -v
+uv run pytest test/test_cli.py -v
+uv run pytest test/test_validators.py -v
+uv run pytest test/test_export.py -v
 ```
 
-**Current Status:** 704 tests passing ✅
+**Current status:** 678 tests passing ✅
 
 ---
 
@@ -434,16 +434,17 @@ difficult_dialogs/
 │   │   ├── sqlite.py         # SQLite database
 │   │   └── markdown.py       # Markdown export
 │   ├── cli.py                # Command-line interface
+│   ├── validators.py         # Quality validation
+│   ├── version.py            # Version block
 │   └── llm/
 │       ├── client.py         # HTTP client
-│       ├── generator.py      # Argument generator
-│       └── enhancer.py       # Runtime enhancement
+│       └── generator.py      # Argument generator
 ├── examples/
 │   ├── sample_arguments/     # 32 pre-made arguments
 │   ├── streamlit_demo.py     # Web interface
 │   └── run_argument.py       # Simple runner
 ├── test/
-│   └── test_*.py             # 704 tests
+│   └── test_*.py             # 678 tests
 ├── docs/
 │   ├── index.md              # Overview and navigation
 │   ├── argument-format.md    # File format reference
@@ -459,17 +460,14 @@ difficult_dialogs/
 ## Contributing
 
 ### Report Issues
-https://github.com/JarbasAl/difficult_dialogs/issues
+https://github.com/TigreGotico/difficult_dialogs/issues
 
 ### Submit PRs
 1. Fork the repo
 2. Create feature branch
-3. Add tests
+3. Add tests (`uv run pytest test/ -v`)
 4. Ensure all tests pass
-5. Submit pull request
-
-### Create Arguments
-See `examples/sample_arguments/README.md` for argument creation guide.
+5. Submit pull request targeting `dev`
 
 ---
 
@@ -509,9 +507,9 @@ Free for personal and commercial use. Attribution appreciated but not required.
 ```bibtex
 @software{difficult_dialogs2026,
   title = {Difficult Dialogs: Structured Argument Framework},
-  author = {JarbasAl},
+  author = {TigreGotico},
   year = {2026},
-  url = {https://github.com/JarbasAl/difficult_dialogs},
+  url = {https://github.com/TigreGotico/difficult_dialogs},
   version = {0.5.0}
 }
 ```
@@ -521,7 +519,7 @@ Free for personal and commercial use. Attribution appreciated but not required.
 ## Support
 
 - **Documentation:** `docs/USER_GUIDE.md`, `docs/DEVELOPER_GUIDE.md`
-- **Issues:** https://github.com/JarbasAl/difficult_dialogs/issues
-- **Discussions:** https://github.com/JarbasAl/difficult_dialogs/discussions
+- **Issues:** https://github.com/TigreGotico/difficult_dialogs/issues
+- **Discussions:** https://github.com/TigreGotico/difficult_dialogs/discussions
 
 Happy debating! 💬
