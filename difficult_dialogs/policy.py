@@ -1,6 +1,9 @@
 """Policy module - controls dialog flow and user interaction.
 
 Policies decide how conversations progress through an argument's premises.
+
+All 10 concrete policy classes are defined here along with POLICY_REGISTRY
+and get_policy() for runtime lookup by name.
 """
 from __future__ import annotations
 
@@ -9,6 +12,8 @@ import random
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, AsyncGenerator, Generator
+
+from difficult_dialogs.exceptions import InvalidPolicyError
 
 if TYPE_CHECKING:
     from difficult_dialogs.arguments import Argument
@@ -642,3 +647,310 @@ class ExploratoryPolicy(BasePolicy):
         
         premise_name, statement = result
         return f"{statement}\nWhat's your view? (y/n) "
+
+
+class MaieuticPolicy(BasePolicy):
+    """Maieutic (guided-discovery) method — leads user to the argument via questions.
+
+    Best for: self-directed learning, philosophy seminars, coaching contexts.
+    """
+
+    INTRO_QUESTIONS: list[str] = [
+        "Have you ever considered {topic}?",
+        "What are your thoughts on {topic}?",
+        "Why do you think {topic} is important?",
+    ]
+
+    AGREEMENT_QUESTIONS: list[str] = [
+        "What evidence supports that view?",
+        "How does that connect to broader principles?",
+        "What would someone who disagrees say?",
+    ]
+
+    DISAGREEMENT_QUESTIONS: list[str] = [
+        "What makes you skeptical?",
+        "Can you think of any counterexamples?",
+        "What additional information would change your mind?",
+    ]
+
+    def __init__(self, argument: Argument) -> None:
+        super().__init__(argument)
+        self.question_count: int = 0
+
+    def handle_input(self, user_input: str) -> str | None:
+        """Respond with a topic-aware question based on user input."""
+        user_lower = user_input.lower().strip()
+
+        five_w = self._check_five_w(user_lower)
+        if five_w:
+            return five_w
+
+        is_agreement = any(word in user_lower for word in ['yes', 'agree', 'yep', 'true'])
+        is_disagreement = any(word in user_lower for word in ['no', 'disagree', 'false', 'wrong'])
+
+        if is_disagreement:
+            templates = self.DISAGREEMENT_QUESTIONS
+        elif is_agreement:
+            templates = self.AGREEMENT_QUESTIONS
+        else:
+            templates = self.INTRO_QUESTIONS
+
+        template = random.choice(templates)
+        topic = self.argument.name.replace("_", " ")
+        self.question_count += 1
+        return template.format(topic=topic)
+
+    def start(self) -> str:
+        """Start with an open topic question."""
+        topic = self.argument.name.replace("_", " ")
+        return f"Let's explore: {topic}. What's your initial perspective?"
+
+
+class SkepticPolicy(BasePolicy):
+    """Skeptical debater — challenges every claim.
+
+    Best for: stress-testing arguments, adversarial review.
+    """
+
+    CHALLENGE_PHRASES = [
+        "That's a bold claim. What's your strongest evidence?",
+        "I'm not convinced. Many experts disagree.",
+        "Correlation doesn't imply causation. How do you know?",
+        "That seems like an oversimplification.",
+        "What about alternative explanations?",
+        "How do you rule out confounding factors?",
+        "Isn't that just anecdotal evidence?",
+        "What's the sample size on that?",
+    ]
+
+    COUNTER_PHRASES = [
+        "But consider this: ",
+        "However, there's another perspective: ",
+        "On the other hand: ",
+        "A contrary view suggests: ",
+    ]
+
+    def handle_input(self, user_input: str) -> str | None:
+        """Challenge the user's position."""
+        user_lower = user_input.lower().strip()
+
+        five_w = self._check_five_w(user_lower)
+        if five_w:
+            return five_w
+
+        if any(word in user_lower for word in ['yes', 'agree', 'yep']):
+            return random.choice(self.CHALLENGE_PHRASES)
+
+        if any(word in user_lower for word in ['no', 'disagree']):
+            next_stmt = self._get_next_statement()
+            if next_stmt:
+                _, statement = next_stmt
+                prefix = random.choice(self.COUNTER_PHRASES)
+                return f"{prefix}{statement}"
+
+        return "I need more convincing. What specific evidence can you provide?"
+
+
+class TeacherPolicy(BasePolicy):
+    """Patient educator — explains with examples.
+
+    Best for: clarity-focused teaching, onboarding, newcomers to a topic.
+    """
+
+    TRANSITION_PHRASES = [
+        "Great question! Let me explain further.",
+        "I'm glad you asked. Here's why:",
+        "That's an important point. Consider this:",
+        "Let's break this down step by step.",
+    ]
+
+    EXAMPLE_INTROS = [
+        "For example, ",
+        "To illustrate, ",
+        "Think of it like this: ",
+        "A real-world case is ",
+    ]
+
+    SUMMARY_PHRASES = [
+        "So in summary, ",
+        "The key takeaway is: ",
+        "What this means is: ",
+    ]
+
+    def __init__(self, argument: Argument) -> None:
+        super().__init__(argument)
+        self.explaining = False
+
+    def handle_input(self, user_input: str) -> str | None:
+        """Provide educational response."""
+        user_lower = user_input.lower().strip()
+
+        five_w = self._check_five_w(user_lower)
+        if five_w:
+            return five_w
+
+        if '?' in user_input:
+            return random.choice(self.TRANSITION_PHRASES) + " " + self._get_explanation()
+
+        if any(word in user_lower for word in ['yes', 'agree', 'understand']):
+            return self._reinforce_concept()
+
+        if any(word in user_lower for word in ['no', 'disagree', 'confused']):
+            return self._clarify_misconception()
+
+        return self._teach_with_example()
+
+    def _get_explanation(self) -> str:
+        next_stmt = self._get_next_statement()
+        if next_stmt:
+            return next_stmt[1]
+        return self.argument.conclusion
+
+    def _reinforce_concept(self) -> str:
+        explanation = self._get_explanation()
+        summary = random.choice(self.SUMMARY_PHRASES)
+        return f"{summary}{explanation}"
+
+    def _clarify_misconception(self) -> str:
+        next_stmt = self._get_next_statement()
+        if next_stmt:
+            _, statement = next_stmt
+            return f"Let me clarify: {statement}"
+        return "Let me rephrase that more clearly."
+
+    def _teach_with_example(self) -> str:
+        next_stmt = self._get_next_statement()
+        if next_stmt:
+            _, statement = next_stmt
+            example_intro = random.choice(self.EXAMPLE_INTROS)
+            return f"{example_intro}{statement}"
+        return self.argument.conclusion
+
+
+class DebaterPolicy(BasePolicy):
+    """Aggressive debater — presents strong counterarguments.
+
+    Best for: debate practice, adversarial argumentation training.
+    """
+
+    ATTACK_PHRASES = [
+        "Your position is fundamentally flawed.",
+        "That argument has been thoroughly debunked.",
+        "You're ignoring critical evidence.",
+        "That's a logical fallacy.",
+        "Your reasoning doesn't hold up to scrutiny.",
+    ]
+
+    DEFENSE_PHRASES = [
+        "My position is supported by substantial evidence.",
+        "The data clearly shows otherwise.",
+        "Multiple studies confirm my view.",
+        "Expert consensus contradicts your claim.",
+    ]
+
+    def __init__(self, argument: Argument) -> None:
+        super().__init__(argument)
+        self.points_made: int = 0
+
+    def handle_input(self, user_input: str) -> str | None:
+        """Present counterarguments."""
+        user_lower = user_input.lower().strip()
+
+        five_w = self._check_five_w(user_lower)
+        if five_w:
+            return five_w
+
+        if len(user_lower) > 10:
+            attack = random.choice(self.ATTACK_PHRASES)
+            next_stmt = self._get_next_statement()
+            if next_stmt:
+                _, counter = next_stmt
+                return f"{attack} {counter}"
+            return attack
+
+        if any(word in user_lower for word in ['yes', 'agree', 'fine']):
+            return random.choice(self.DEFENSE_PHRASES)
+
+        if any(word in user_lower for word in ['no', 'disagree']):
+            next_stmt = self._get_next_statement()
+            if next_stmt:
+                _, statement = next_stmt
+                return f"Exactly! {statement}"
+
+        next_stmt = self._get_next_statement()
+        if next_stmt:
+            return next_stmt[1]
+
+        return self.argument.conclusion
+
+
+class MinimalistPolicy(BasePolicy):
+    """Concise communicator — brief and direct.
+
+    Best for: quick debates, mobile interfaces, low-bandwidth interactions.
+    """
+
+    BRIEF_AGREE = ["Agreed.", "True.", "Correct.", "Yes.", "Right."]
+    BRIEF_DISAGREE = ["Disagree.", "Wrong.", "Incorrect.", "No.", "False."]
+    BRIEF_STATEMENTS = ["Here's why:", "Evidence:", "Fact:", "Reality:", "Truth:"]
+
+    def handle_input(self, user_input: str) -> str | None:
+        """Respond briefly."""
+        user_lower = user_input.lower().strip()
+
+        five_w = self._check_five_w(user_lower)
+        if five_w:
+            return five_w[:100] + ("..." if len(five_w) > 100 else "")
+
+        if any(word in user_lower for word in ['yes', 'agree', 'yep']):
+            return random.choice(self.BRIEF_AGREE)
+
+        if any(word in user_lower for word in ['no', 'disagree', 'nah']):
+            next_stmt = self._get_next_statement()
+            if next_stmt:
+                _, stmt = next_stmt
+                brief = stmt[:50] + ("..." if len(stmt) > 50 else "")
+                return f"{random.choice(self.BRIEF_STATEMENTS)} {brief}"
+            return random.choice(self.BRIEF_DISAGREE)
+
+        next_stmt = self._get_next_statement()
+        if next_stmt:
+            _, stmt = next_stmt
+            return stmt[:100] + ("..." if len(stmt) > 100 else "")
+
+        return self.argument.conclusion[:100]
+
+
+# Registry mapping lowercase names to policy classes.
+POLICY_REGISTRY: dict[str, type[BasePolicy]] = {
+    "knowitall": KnowItAllPolicy,
+    "silent": SilentPolicy,
+    "socratic": SocraticPolicy,
+    "debate": DebatePolicy,
+    "exploratory": ExploratoryPolicy,
+    "maieutic": MaieuticPolicy,
+    "skeptic": SkepticPolicy,
+    "teacher": TeacherPolicy,
+    "debater": DebaterPolicy,
+    "minimalist": MinimalistPolicy,
+}
+
+
+def get_policy(name: str, argument: Argument) -> BasePolicy:
+    """Get a policy instance by name.
+
+    Args:
+        name: Policy name (case-insensitive).
+        argument: Argument to apply the policy to.
+
+    Returns:
+        Policy instance.
+
+    Raises:
+        InvalidPolicyError: If policy name is not recognized.
+    """
+    name_lower = name.lower().strip()
+    if name_lower not in POLICY_REGISTRY:
+        available = ", ".join(POLICY_REGISTRY.keys())
+        raise InvalidPolicyError(f"Unknown policy: {name_lower!r}. Available: {available}")
+    return POLICY_REGISTRY[name_lower](argument)

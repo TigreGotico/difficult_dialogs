@@ -2,7 +2,7 @@
 import pytest
 from difficult_dialogs.arguments import Argument
 from difficult_dialogs.premises import Premise
-from difficult_dialogs.policies import (
+from difficult_dialogs.policy import (
     MaieuticPolicy,
     SkepticPolicy,
     TeacherPolicy,

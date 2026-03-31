@@ -206,7 +206,7 @@ def cmd_export(args: argparse.Namespace) -> int:
 def cmd_debate(args: argparse.Namespace) -> int:
     """Run interactive debate with an argument."""
     from difficult_dialogs.arguments import Argument
-    from difficult_dialogs.policies import get_policy, POLICY_REGISTRY
+    from difficult_dialogs.policy import get_policy, POLICY_REGISTRY
 
     arg_path = Path(args.argument)
 

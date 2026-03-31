@@ -33,8 +33,7 @@ Legacy format was dropped in refactor. No longer present.
 
 ## Technical Debt
 
-### Dual policy modules
-`policy.py` and `policies.py` define separate class hierarchies with no shared base beyond `BasePolicy`. This creates import confusion and a maintenance split. Candidates for consolidation in a future refactor.
+~~Dual policy modules~~ — resolved: all 10 policy classes, `POLICY_REGISTRY`, and `get_policy` merged into `policy.py`; `policies.py` deleted.
 
 ### `export.py` size
 At 589 lines, `export.py` mixes SQLite schema management, CRUD, JSON serialization, and validation. Should be split into `export/json.py`, `export/sqlite.py`, and `export/validator_bridge.py`.

@@ -20,14 +20,12 @@ from difficult_dialogs.policy import (
     SocraticPolicy,
     DebatePolicy,
     ExploratoryPolicy,
-    PolicyState,
-)
-from difficult_dialogs.policies import (
     MaieuticPolicy,
     SkepticPolicy,
     TeacherPolicy,
     DebaterPolicy,
     MinimalistPolicy,
+    PolicyState,
     POLICY_REGISTRY,
     get_policy,
 )
