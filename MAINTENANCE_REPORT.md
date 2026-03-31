@@ -63,5 +63,18 @@ Audit log of AI-assisted changes to this repository.
    - Added `_validate_five_ws()`: INFO-level notice for each premise missing any 5W field.
    - Added 7 tests for `Argument.save()` and contradiction/five-ws validator behaviour.
 
-**Oversight:** Full automated test suite (563 tests) passed after each commit.
+8. **refactor: replace `_save_argument_files` with `arg.save()`; add `--policy` to debate; remove dead `DebaterPolicy.opposition`**
+   (`cli.py`, `policies.py`)
+   - CLI's `_save_argument_files` duplicated `Argument.save()` but omitted all 5W files; replaced.
+   - `debate` subcommand now accepts `-p/--policy` with all 10 policy names as choices.
+   - `DebaterPolicy.opposition` parameter stored but never read; removed to avoid misleading callers.
+
+9. **feat: add `support` and `five_ws` tables to SQLite schema** (`export.py`)
+   - `LibraryDatabase.add_argument` was silently discarding support arguments and all 5W content.
+     An argument exported to SQLite and re-loaded via `get_argument()` would be missing all
+     5W answers, making it unusable for interactive debates.
+   - Added `support` and `five_ws` tables; `get_argument` now restores all fields on load.
+   - 2 new tests: `test_support_persisted_in_sqlite`, `test_five_ws_persisted_in_sqlite`.
+
+**Oversight:** Full automated test suite (565 tests) passed after each commit.
 Human review required before merging or publishing.
