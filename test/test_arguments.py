@@ -365,3 +365,81 @@ def test_diff_unchanged_premise_not_in_modified() -> None:
     result = a.diff(b)
     assert "p1" not in result["modified_premises"]
     assert "p2" in result["modified_premises"]
+
+
+# ---------------------------------------------------------------------------
+# Argument.merge()
+# ---------------------------------------------------------------------------
+
+def test_merge_combines_premises() -> None:
+    """Merged argument contains premises from all source arguments."""
+    a = _make_arg(name="a", premises=[("p1", ["s1"])])
+    b = _make_arg(name="b", premises=[("p2", ["s2"])])
+    m = Argument.merge(a, b)
+    assert {p.name for p in m.premises} == {"p1", "p2"}
+
+
+def test_merge_inherits_meta_from_first() -> None:
+    """Name, intro, conclusion default to the first argument's values."""
+    a = _make_arg(name="first", premises=[("p1", ["s1"])])
+    b = _make_arg(name="second", premises=[("p2", ["s2"])])
+    m = Argument.merge(a, b)
+    assert m.name == "first"
+
+
+def test_merge_explicit_meta_overrides() -> None:
+    """Explicit name/intro/conclusion override source defaults."""
+    a = _make_arg(name="a", premises=[("p1", ["s1"])])
+    b = _make_arg(name="b", premises=[("p2", ["s2"])])
+    m = Argument.merge(a, b, name="merged", intro="Hello", conclusion="Bye")
+    assert m.name == "merged"
+    assert m.intro == "Hello"
+    assert m.conclusion == "Bye"
+
+
+def test_merge_keep_first_on_conflict() -> None:
+    """keep_first: first premise wins on duplicate name."""
+    a = _make_arg(premises=[("p1", ["original"])])
+    b = _make_arg(premises=[("p1", ["replacement"])])
+    m = Argument.merge(a, b, on_conflict="keep_first")
+    assert m.get_premise("p1").statements[0].text == "original"
+
+
+def test_merge_keep_last_on_conflict() -> None:
+    """keep_last: last premise wins on duplicate name."""
+    a = _make_arg(premises=[("p1", ["original"])])
+    b = _make_arg(premises=[("p1", ["replacement"])])
+    m = Argument.merge(a, b, on_conflict="keep_last")
+    assert m.get_premise("p1").statements[0].text == "replacement"
+
+
+def test_merge_error_on_conflict() -> None:
+    """on_conflict='error' raises ValueError for duplicate premise names."""
+    a = _make_arg(premises=[("p1", ["s1"])])
+    b = _make_arg(premises=[("p1", ["s2"])])
+    with pytest.raises(ValueError, match="Duplicate premise name"):
+        Argument.merge(a, b, on_conflict="error")
+
+
+def test_merge_requires_two_args() -> None:
+    """merge() with fewer than two arguments raises ValueError."""
+    a = _make_arg(premises=[("p1", ["s1"])])
+    with pytest.raises(ValueError, match="at least two"):
+        Argument.merge(a)
+
+
+def test_merge_invalid_on_conflict() -> None:
+    """Unknown on_conflict strategy raises ValueError."""
+    a = _make_arg(premises=[("p1", ["s1"])])
+    b = _make_arg(premises=[("p2", ["s2"])])
+    with pytest.raises(ValueError, match="Unknown on_conflict"):
+        Argument.merge(a, b, on_conflict="bogus")
+
+
+def test_merge_three_arguments() -> None:
+    """merge() works with more than two source arguments."""
+    a = _make_arg(premises=[("p1", ["s1"])])
+    b = _make_arg(premises=[("p2", ["s2"])])
+    c = _make_arg(premises=[("p3", ["s3"])])
+    m = Argument.merge(a, b, c)
+    assert len(m.premises) == 3

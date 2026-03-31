@@ -335,6 +335,67 @@ class Argument:
             "modified_premises": modified_premises,
         }
 
+    @classmethod
+    def merge(
+        cls,
+        *args: Argument,
+        name: str = "",
+        intro: str = "",
+        conclusion: str = "",
+        on_conflict: str = "keep_first",
+    ) -> Argument:
+        """Merge premises from multiple arguments into a new Argument.
+
+        Premises with duplicate names are handled according to *on_conflict*:
+
+        - ``"keep_first"`` — first occurrence wins (default).
+        - ``"keep_last"``  — last occurrence wins.
+        - ``"error"``      — raise ``ValueError`` on first duplicate name.
+
+        The merged argument's *name*, *intro*, and *conclusion* may be
+        provided explicitly; otherwise they fall back to the first argument's
+        values.
+
+        Args:
+            *args: Two or more Argument instances to merge.
+            name: Name for the merged argument (optional).
+            intro: Intro text (optional, falls back to first arg).
+            conclusion: Conclusion text (optional, falls back to first arg).
+            on_conflict: Conflict resolution strategy.
+
+        Returns:
+            New Argument containing all (or winning) premises.
+
+        Raises:
+            ValueError: If fewer than two arguments are given, or
+                        *on_conflict* is ``"error"`` and a duplicate is found.
+        """
+        if len(args) < 2:
+            raise ValueError("merge() requires at least two arguments")
+        if on_conflict not in ("keep_first", "keep_last", "error"):
+            raise ValueError(f"Unknown on_conflict strategy: {on_conflict!r}")
+
+        merged = cls(
+            name=name or args[0].name,
+            intro=intro or args[0].intro,
+            conclusion=conclusion or args[0].conclusion,
+        )
+
+        for source in args:
+            for premise in source.premises:
+                if premise.name in merged._premises:
+                    if on_conflict == "error":
+                        raise ValueError(
+                            f"Duplicate premise name {premise.name!r} "
+                            f"found while merging arguments"
+                        )
+                    if on_conflict == "keep_first":
+                        continue  # skip duplicate
+                    # keep_last: fall through to overwrite
+                merged._premises[premise.name] = premise
+
+        return merged
+
     def __bool__(self) -> bool:
         """Return whether this argument is currently accepted as true."""
         return self.is_true
