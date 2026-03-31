@@ -1,337 +1,217 @@
+"""Premise module - a collection of statements that form a logical unit.
+
+A Premise is True if all its statements are True (agreed by user).
 """
-A premise is a set of Statements, a premise is True if all it's statements are True
+from __future__ import annotations
 
-A premise also has sources to back it up, and support dialog that can be interjected at will
-
-```python
-from difficult_dialogs.premises import Premise
-
-p = Premise("pizza tastes good")
-p.add_statement("pizza is food")
-p.add_statement("the taste of pizza is pleasant")
-p.add_support_statement("i like pizza")
-p.add_source("http://pizza_reviews.com")
-
-for s in p.statements:
-    assert s.is_true
-assert bool(p) == True
-
-p.statements[0].disagree()
-
-assert bool(p) == False
-
-assert p.as_json == {'is_true': False,
-                     'sources': ['http://pizza_reviews.com'],
-                     'statements': ['pizza is food',
-                                    'the taste of pizza is pleasant'],
-                     'support': ['i like pizza'],
-                     'description': 'pizza tastes good'}
-```
-"""
-
-from typing import Any, Optional, Union
+from dataclasses import dataclass, field
+from typing import Any
 
 from difficult_dialogs.statements import Statement
-from difficult_dialogs.exceptions import UnrecognizedStatementFormat, \
-    UnrecognizedDescriptionFormat
 
 
+@dataclass
 class Premise:
-
-    def __init__(self, description: Union[str, Statement],
-                 statements: Optional[list[Union[str, Statement]]] = None,
-                 sources: Optional[list[str]] = None,
-                 support: Optional[list[Union[str, Statement]]] = None,
-                 what: Optional[list[Union[str, Statement]]] = None,
-                 when: Optional[list[Union[str, Statement]]] = None,
-                 where: Optional[list[Union[str, Statement]]] = None,
-                 how: Optional[list[Union[str, Statement]]] = None,
-                 why: Optional[list[Union[str, Statement]]] = None) -> None:
-        """
-
-        A premise is a core assumption of an argument
-
-        All statements in a premise need to be said, in no particular order, to understand the premise
-
-        A premise is True if all it's statements are True
-
-        A Premise contains:
-        - support statements - sentences that can be said at any time in
-        support of the premise
-        - sources - urls or strings identifying the source of the
-        information this premise is based on
-
-        Premises provide answer to the [Five Ws](https://en.wikipedia.org/wiki/Five_Ws)
-        - Who was involved?
-        - What happened?
-        - Where did it take place?
-        - When did it take place?
-        - Why did that happen?
-
-        Args:
-            description:
-            statements:
-            sources:
-            support:
-            what:
-            when:
-            where:
-            how:
-            why:
-        """
-        statements = statements or []
-        self.statements = []
-        for s in statements:
-            s = self.validate_statement(s)
-            self.statements.append(s)
-
-        support = support or []
-        self.support_statements = []
-        for s in support:
-            s = self.validate_statement(s)
-            self.support_statements.append(s)
-
-        self.sources = sources or []
-        self.what = []
-        what = what or []
-        for s in what:
-            s = self.validate_statement(s)
-            self.what.append(s)
-        self.when = []
-        when = when or []
-        for s in when:
-            s = self.validate_statement(s)
-            self.when.append(s)
-        self.where = []
-        where = where or []
-        for s in where:
-            s = self.validate_statement(s)
-            self.where.append(s)
-        self.how = []
-        how = how or []
-        for s in how:
-            s = self.validate_statement(s)
-            self.how.append(s)
-        self.why = []
-        why = why or []
-        for s in why:
-            s = self.validate_statement(s)
-            self.why.append(s)
-        self.description = self.validate_statement(description)
-
-    def agree(self) -> None:
-        """ flag all statements as True """
-        for idx, s in enumerate(self.support_statements):
-            self.support_statements[idx].agree()
-        for idx, s in enumerate(self.statements):
-            self.statements[idx].agree()
-
-    @staticmethod
-    def validate_statement(statement: Union[str, Statement]) -> Statement:
-        """
-
-        Args:
-            statement:
-
-        Returns:
-
-        """
-        if isinstance(statement, str):
-            statement = Statement(statement)
-        if not isinstance(statement, Statement):
-            raise UnrecognizedStatementFormat
-        return statement
-
-    def from_json(self, json_dict: dict[str, Any]) -> None:
-        """
-
-        Args:
-            json_dict:
-        """
-        self.description = json_dict.get("description", self.description)
-        for s in json_dict.get("sources"):
-            self.add_source(s)
-        for s in json_dict.get("statements"):
-            self.add_statement(s)
-        for s in json_dict.get("support"):
-            self.add_support_statement(s)
-
-    @property
-    def as_json(self) -> dict[str, Any]:
-        """
-
-        Returns:
-
-        """
-        return {"description": self.description.text,
-                "sources": self.sources,
-                "statements": [s.text for s in self.statements],
-                "support": [s.text for s in self.support_statements],
-                "what": [s.text for s in self.what],
-                "why": [s.text for s in self.why],
-                "when": [s.text for s in self.when],
-                "where": [s.text for s in self.where],
-                "how": [s.text for s in self.how],
-                "is_true": self.is_true}
-
-    def update(self, premise):
-        """
-        if premise is an Premise object or dictionary, statements,
-        support and sources will be merged
-
-        if premise is a string, a support statement will be merged
-
-        if premise is a list, each item will be added recursively
-        """
-        if isinstance(premise, Premise):
-            self.update(premise.as_json)
-        elif isinstance(premise, str):
-            self.add_support_statement(premise)
-        elif isinstance(premise, dict):
-            statements = premise.get("statements", [])
-            for s in statements:
-                self.add_statement(s)
-            statements = premise.get("support", [])
-            for s in statements:
-                self.add_support_statement(s)
-            sources = premise.get("sources", [])
-            for s in sources:
-                self.add_source(s)
-            statements = premise.get("what", [])
-            for s in statements:
-                self.add_what_statement(s)
-            statements = premise.get("when", [])
-            for s in statements:
-                self.add_when_statement(s)
-            statements = premise.get("why", [])
-            for s in statements:
-                self.add_why_statement(s)
-            statements = premise.get("where", [])
-            for s in statements:
-                self.add_where_statement(s)
-            statements = premise.get("how", [])
-            for s in statements:
-                self.add_how_statement(s)
-        elif isinstance(premise, list):
-            for s in premise:
-                self.update(s)
-
-    def set_description(self, text):
-        """ set premise description from string"""
-        if not isinstance(text, str) and not isinstance(text, Statement):
-            raise UnrecognizedDescriptionFormat("description of a Premise "
-                                                "must be a string or "
-                                                "Statement")
-        self.description = text
-
-    def add_source(self, text: str) -> None:
-        """
-
-        Args:
-            text:
-        """
-        if text not in self.sources:
-            self.sources.append(text)
-
-    def add_statement(self, text: Union[str, Statement]) -> None:
-        """
-
-        Args:
-            text:
-        """
-        print(text)
-        text = self.validate_statement(text)
-        if text not in self.statements:
-            self.statements.append(text)
-
-    def add_support_statement(self, text: Union[str, Statement]) -> None:
-        """
-
-        Args:
-            text:
-        """
-        text = self.validate_statement(text)
-        if text not in self.support_statements:
-            self.support_statements.append(text)
-
-    def add_what_statement(self, text):
-        """
-
-        Args:
-            text:
-        """
-        text = self.validate_statement(text)
-        if text not in self.what:
-            self.what.append(text)
-
-    def add_when_statement(self, text):
-        """
-
-        Args:
-            text:
-        """
-        text = self.validate_statement(text)
-        if text not in self.when:
-            self.when.append(text)
-
-    def add_where_statement(self, text):
-        """
-
-        Args:
-            text:
-        """
-        text = self.validate_statement(text)
-        if text not in self.where:
-            self.where.append(text)
-
-    def add_how_statement(self, text):
-        """
-
-        Args:
-            text:
-        """
-        text = self.validate_statement(text)
-        if text not in self.how:
-            self.how.append(text)
-
-    def add_why_statement(self, text):
-        """
-
-        Args:
-            text:
-        """
-        text = self.validate_statement(text)
-        if text not in self.why:
-            self.why.append(text)
-
+    """A premise containing statements that must all be agreed upon.
+    
+    A premise represents a single claim or assertion in an argument.
+    It is considered True only when all its statements are agreed with.
+    
+    Attributes:
+        name: Identifier for this premise.
+        description: Human-readable description of the premise.
+        statements: List of statements that must be agreed with.
+        support: Supporting arguments used when user disagrees.
+        sources: Evidence URLs or citations backing this premise.
+        what: Explanations answering "what" questions.
+        why: Explanations answering "why" questions.
+        how: Explanations answering "how" questions.
+        when: Contextual information about timing.
+        where: Contextual information about location.
+    """
+    name: str
+    description: str = ""
+    statements: list[Statement] = field(default_factory=list)
+    support: list[str] = field(default_factory=list)
+    sources: list[str] = field(default_factory=list)
+    what: list[str] = field(default_factory=list)
+    why: list[str] = field(default_factory=list)
+    how: list[str] = field(default_factory=list)
+    when: list[str] = field(default_factory=list)
+    where: list[str] = field(default_factory=list)
+    
+    def __post_init__(self) -> None:
+        """Set description from name if not provided."""
+        if not self.description:
+            self.description = self.name.replace("_", " ").capitalize()
+    
     @property
     def is_true(self) -> bool:
-        """ premises are true if all their statements are true """
-        for s in self.statements:
-            if not s.is_true:
-                return False
-        return True
-
+        """Return True if all statements are agreed."""
+        return all(stmt.agreed for stmt in self.statements) if self.statements else True
+    
     @property
-    def stats(self):
-        """ return dictionary with stats about premise """
-        return {"num_statements": len(self.statements),
-                "num_support": len(self.support_statements),
-                "num_sources": len(self.sources),
-                "is_true": self.is_true}
-
-    def __str__(self):
-        """
-
+    def is_complete(self) -> bool:
+        """Return True if premise has at least one statement."""
+        return len(self.statements) > 0
+    
+    def add_statement(self, text: str) -> Premise:
+        """Add a statement to this premise.
+        
+        Args:
+            text: The statement text.
+            
         Returns:
-
+            Self for method chaining.
         """
-        return self.description.text
-
-    def __bool__(self):
-        """
-
+        self.statements.append(Statement(text))
+        return self
+    
+    def add_support(self, text: str) -> Premise:
+        """Add a support statement.
+        
+        Args:
+            text: Support statement text.
+            
         Returns:
-
+            Self for method chaining.
         """
+        if text not in self.support:
+            self.support.append(text)
+        return self
+    
+    def add_source(self, url: str) -> Premise:
+        """Add a source URL or citation.
+        
+        Args:
+            url: Source URL or citation text.
+            
+        Returns:
+            Self for method chaining.
+        """
+        if url not in self.sources:
+            self.sources.append(url)
+        return self
+    
+    def add_what(self, text: str) -> Premise:
+        """Add explanation for "what" questions."""
+        if text not in self.what:
+            self.what.append(text)
+        return self
+    
+    def add_why(self, text: str) -> Premise:
+        """Add explanation for "why" questions."""
+        if text not in self.why:
+            self.why.append(text)
+        return self
+    
+    def add_how(self, text: str) -> Premise:
+        """Add explanation for "how" questions."""
+        if text not in self.how:
+            self.how.append(text)
+        return self
+    
+    def add_when(self, text: str) -> Premise:
+        """Add contextual information about timing."""
+        if text not in self.when:
+            self.when.append(text)
+        return self
+    
+    def add_where(self, text: str) -> Premise:
+        """Add contextual information about location."""
+        if text not in self.where:
+            self.where.append(text)
+        return self
+    
+    def get_next_statement(self, cache: set[str]) -> Statement | None:
+        """Get the next unspoken statement.
+        
+        Args:
+            cache: Set of already spoken statement texts.
+            
+        Returns:
+            Next statement to present, or None if all spoken.
+        """
+        for stmt in self.statements:
+            if stmt.text not in cache:
+                return stmt
+        return None
+    
+    def get_support(self, cache: set[str]) -> str | None:
+        """Get an unused support statement.
+        
+        Args:
+            cache: Set of already spoken texts.
+            
+        Returns:
+            A support statement, or None if exhausted.
+        """
+        for text in self.support:
+            if text not in cache:
+                return text
+        return None
+    
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary representation."""
+        return {
+            "name": self.name,
+            "description": self.description,
+            "statements": [s.text for s in self.statements],
+            "support": self.support.copy(),
+            "sources": self.sources.copy(),
+            "what": self.what.copy(),
+            "why": self.why.copy(),
+            "how": self.how.copy(),
+            "when": self.when.copy(),
+            "where": self.where.copy(),
+            "is_true": self.is_true,
+        }
+    
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Premise:
+        """Create a Premise from a dictionary.
+        
+        Args:
+            data: Dictionary with premise data.
+            
+        Returns:
+            New Premise instance.
+        """
+        premise = cls(
+            name=data.get("name", ""),
+            description=data.get("description", ""),
+        )
+        
+        for stmt_text in data.get("statements", []):
+            premise.add_statement(stmt_text)
+        
+        for text in data.get("support", []):
+            premise.add_support(text)
+        
+        for url in data.get("sources", []):
+            premise.add_source(url)
+        
+        for text in data.get("what", []):
+            premise.add_what(text)
+        
+        for text in data.get("why", []):
+            premise.add_why(text)
+        
+        for text in data.get("how", []):
+            premise.add_how(text)
+        
+        for text in data.get("when", []):
+            premise.add_when(text)
+        
+        for text in data.get("where", []):
+            premise.add_where(text)
+        
+        return premise
+    
+    def __bool__(self) -> bool:
+        """Return whether this premise is currently accepted as true."""
         return self.is_true
+    
+    def __str__(self) -> str:
+        """Return the premise description."""
+        return self.description

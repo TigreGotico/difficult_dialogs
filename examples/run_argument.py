@@ -1,38 +1,53 @@
-from os.path import join, dirname
+#!/usr/bin/env python3
+"""Simple example running an argument with user interaction."""
+import sys
+from pathlib import Path
 
-from difficult_dialogs.arguments import Argument
-from difficult_dialogs.policy import BasePolicy
-
-arg_folder = join(dirname(__file__), "i_think_therefore_i_am")
-arg = Argument(path=arg_folder)
-dialog = BasePolicy(argument=arg)
+from difficult_dialogs import Argument, KnowItAllPolicy
 
 
-# load a random premise
-assertion = dialog.choose_premise()
-dialog.current_premise = assertion
-
-print(assertion)
-print(assertion.sources)
-
-# select a statement from premise
-statement = dialog.choose_next_statement()
-print(statement)
-
-
-# argument manual control
-
-arg_folder = join(dirname(__file__), "argument_template")
-arg = Argument(path=arg_folder)
-dialog = BasePolicy(argument=arg)
-print(dialog.start())
-
-while not dialog.finished:
-    # get a new premise
-    assertion = dialog.choose_premise()
-    if assertion:
-        for s in assertion.statements:
-            print(s)
+def main():
+    """Run an argument with user interaction."""
+    # Get path from command line or use default
+    if len(sys.argv) > 1:
+        arg_path = Path(sys.argv[1])
     else:
-        # no more premises
-        print(dialog.end())
+        arg_path = Path(__file__).parent / "i_think_therefore_i_am"
+    
+    if not arg_path.exists():
+        print(f"ERROR: Argument path not found: {arg_path}")
+        sys.exit(1)
+    
+    arg = Argument()
+    arg.load(arg_path)
+    
+    print(f"ARGUMENT: {arg.name}")
+    print("=" * 50)
+    
+    policy = KnowItAllPolicy(arg)
+    
+    # Start dialog
+    intro = policy.start()
+    if intro:
+        print(f"\nBOT: {intro}")
+    
+    while not policy.state.finished:
+        try:
+            user_input = input("\nUSER: ").strip()
+            if not user_input:
+                continue
+            
+            response = policy.handle_input(user_input)
+            if response:
+                print(f"\nBOT: {response}")
+                
+        except KeyboardInterrupt:
+            print("\n\nInterrupted!")
+            break
+    
+    print("\n" + "=" * 50)
+    print("Dialog complete.")
+
+
+if __name__ == "__main__":
+    main()

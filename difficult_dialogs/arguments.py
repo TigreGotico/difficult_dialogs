@@ -3,15 +3,19 @@
 An Argument is loaded from a folder structure with plain text files:
 
     my_argument/
-    ├── intro.dialog          # Opening statement
+    ├── intro.dialog              # Opening statement
+    ├── conclusion.conclusion     # Final statement
     ├── premise_name/
-    │   ├── description.premise   # The claim being made
-    │   ├── statement_1.dialog    # Supporting statements
-    │   ├── support.support       # Fallback arguments when user disagrees
-    │   └── source.source         # Evidence URLs
-    ├── another_premise/
-    │   └── ...
-    └── conclusion.conclusion     # Final statement
+    │   ├── premise_name.premise  # Supporting statements (one per line)
+    │   ├── premise_name.support  # Fallback arguments when user disagrees
+    │   ├── premise_name.source   # Evidence URLs
+    │   ├── premise_name.what     # What it means
+    │   ├── premise_name.why      # Why it is true
+    │   ├── premise_name.how      # How it works
+    │   ├── premise_name.when     # When it applies
+    │   └── premise_name.where    # Where it is observed
+    └── another_premise/
+        └── ...
 """
 from __future__ import annotations
 
@@ -107,37 +111,28 @@ class Argument:
     
     def load(self, path: str | Path) -> Argument:
         """Load argument from a directory structure.
-        
-        Supports TWO formats:
-        
-        NEW FORMAT (subdirectories per premise):
+
+        Expected layout::
+
             path/
             ├── intro.dialog
             ├── conclusion.conclusion
-            ├── premise_name/
-            │   ├── description.premise
-            │   ├── support.support
-            │   └── source.source
-        
-        LEGACY FORMAT (flat structure):
-            path/
-            ├── argument.intro
-            ├── argument.conclusion
-            ├── X.premise
-            ├── X.support
-            ├── X.source
-            ├── X.what
-            ├── X.why
-            ├── X.how
-            ├── X.when
-            └── X.where
-        
+            └── premise_name/
+                ├── premise_name.premise
+                ├── premise_name.support   (optional)
+                ├── premise_name.source    (optional)
+                ├── premise_name.what      (optional)
+                ├── premise_name.why       (optional)
+                ├── premise_name.how       (optional)
+                ├── premise_name.when      (optional)
+                └── premise_name.where     (optional)
+
         Args:
             path: Path to the argument directory.
-            
+
         Returns:
             Self for method chaining.
-            
+
         Raises:
             ArgumentLoadError: If path doesn't exist or is not a directory.
         """
@@ -148,88 +143,25 @@ class Argument:
 
         if not path.is_dir():
             raise ArgumentLoadError(f"Argument path must be a directory: {path}")
-        
+
         self.path = path
-        
+
         if not self.name:
             self.name = path.name.replace("_", " ")
-        
-        # Try new format first (subdirectories)
-        has_subdirs = any(item.is_dir() for item in path.iterdir())
-        
-        if has_subdirs:
-            # NEW FORMAT: Load from subdirectories
-            self._load_new_format(path)
-        else:
-            # LEGACY FORMAT: Load from flat structure
-            self._load_legacy_format(path)
-        
-        return self
-    
-    def _load_new_format(self, path: Path) -> None:
-        """Load argument using new subdirectory format."""
-        # Load intro
+
         intro_file = path / "intro.dialog"
         if intro_file.exists():
             self.intro = intro_file.read_text().strip()
-        
-        # Load conclusion
+
         conclusion_file = path / "conclusion.conclusion"
         if conclusion_file.exists():
             self.conclusion = conclusion_file.read_text().strip()
-        
-        # Load premises from subdirectories
+
         for item in path.iterdir():
             if item.is_dir():
                 self._load_premise(item)
-    
-    def _load_legacy_format(self, path: Path) -> None:
-        """Load argument using legacy flat file format."""
-        # Load intro (legacy naming)
-        for intro_name in ["intro.dialog", "argument.intro"]:
-            intro_file = path / intro_name
-            if intro_file.exists():
-                self.intro = intro_file.read_text().strip()
-                break
-        
-        # Load conclusion (legacy naming)
-        for concl_name in ["conclusion.conclusion", "argument.conclusion"]:
-            concl_file = path / concl_name
-            if concl_file.exists():
-                self.conclusion = concl_file.read_text().strip()
-                break
-        
-        # Group files by premise name
-        premise_files: dict[str, dict[str, list[Path]]] = {}
-        
-        for file in path.iterdir():
-            if not file.is_file():
-                continue
-            
-            stem = file.stem  # e.g., "X" from "X.premise"
-            suffix = file.suffix  # e.g., ".premise"
-            
-            if stem not in premise_files:
-                premise_files[stem] = {}
-            
-            if suffix not in premise_files[stem]:
-                premise_files[stem][suffix] = []
-            
-            premise_files[stem][suffix].append(file)
-        
-        # Create premises
-        for premise_name, files_by_suffix in premise_files.items():
-            if premise_name == "argument":
-                continue
 
-            premise = Premise(name=premise_name)
-
-            for files in files_by_suffix.values():
-                for file in files:
-                    self._apply_file_to_premise(premise, file)
-
-            if premise.is_complete:
-                self.add_premise(premise)
+        return self
     
     @staticmethod
     def _apply_file_to_premise(premise: Premise, file: Path) -> None:

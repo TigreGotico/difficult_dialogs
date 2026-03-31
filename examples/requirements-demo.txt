@@ -1,0 +1,5 @@
+# Requirements for Difficult Dialogs demos
+streamlit>=1.28.0
+
+# Install difficult_dialogs package
+# pip install -e ..
