@@ -18,8 +18,7 @@ def main():
         print(f"ERROR: Argument path not found: {arg_path}")
         sys.exit(1)
     
-    arg = Argument()
-    arg.load(arg_path)
+    arg = Argument.from_directory(arg_path)
     
     print(f"ARGUMENT: {arg.name}")
     print("=" * 50)

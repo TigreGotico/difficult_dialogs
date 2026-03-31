@@ -2,7 +2,7 @@
 
 **Compile LLM knowledge into portable, deterministic debate modules.**
 
-[![Tests](https://img.shields.io/badge/tests-517%20passed-green)]()
+[![Tests](https://img.shields.io/badge/tests-704%20passed-green)]()
 [![Type Checked](https://img.shields.io/badge/mypy-strict-blue)]()
 [![Linting](https://img.shields.io/badge/ruff-passed-green)]()
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)]()
@@ -80,7 +80,7 @@ Opens at `http://localhost:8501` with beautiful UI for browsing and debating.
 - **CLI Tool** - Generate, validate, export, debate from command line
 - **Web Demo** - Streamlit-based interactive interface  
 - **Python API** - Full programmatic control
-- **Export Formats** - JSON bundles, SQLite databases
+- **Export Formats** - JSON bundles, SQLite databases, Markdown documents
 - **Validation** - Quality scoring and issue detection
 
 ### ✅ Rich Sample Library
@@ -95,7 +95,7 @@ Opens at `http://localhost:8501` with beautiful UI for browsing and debating.
 
 ### ✅ Quality Assurance
 
-- **517 automated tests** (100% pass rate)
+- **704 automated tests** (100% pass rate)
 - **Validation framework** with scoring (0.0-1.0)
 - **Quality labels**: Excellent ⭐, Good 👍, Fair 😐, Poor ❌
 - **All 32 sample arguments**: Excellent quality (1.00 avg score)
@@ -202,13 +202,13 @@ print(f"Generated {len(arg.premises)} premises")
 ### Validate
 
 ```python
-from difficult_dialogs.validators import validate_argument
+from difficult_dialogs.validators import validate_argument, get_quality_label
 
 result = validate_argument(arg)
 
 print(f"Score: {result.score:.2f}")
 print(f"Passed: {result.passed}")
-print(f"Quality: {validator.get_quality_label(result.score)}")
+print(f"Quality: {get_quality_label(result.score)}")
 
 for issue in result.issues:
     print(f"  {issue}")
@@ -220,7 +220,8 @@ for issue in result.issues:
 from difficult_dialogs.export import (
     export_to_json,
     export_library_to_json,
-    LibraryDatabase
+    export_to_markdown,
+    LibraryDatabase,
 )
 
 # Single argument to JSON
@@ -228,6 +229,10 @@ export_to_json(arg, "my_argument.json")
 
 # Entire library to JSON bundle
 export_library_to_json("examples/sample_arguments", "library.json")
+
+# Human-readable Markdown (returns string; writes file when path given)
+md = export_to_markdown(arg)
+export_to_markdown(arg, "my_argument.md")
 
 # Export to SQLite
 db = LibraryDatabase("library.db")
@@ -240,6 +245,17 @@ print(f"By category: {stats['by_category']}")
 db.close()
 ```
 
+### Compare Argument Versions
+
+```python
+# Review LLM-generated changes before committing
+diff = original.diff(updated)
+print(diff["meta"])               # changed name/intro/conclusion
+print(diff["added_premises"])     # new premise names
+print(diff["removed_premises"])   # deleted premise names
+print(diff["modified_premises"])  # {name: {added_statements, removed_statements}}
+```
+
 ### Run Debate Programmatically
 
 ```python
@@ -247,7 +263,7 @@ from difficult_dialogs.arguments import Argument
 from difficult_dialogs.policy import KnowItAllPolicy
 
 # Load argument
-arg = Argument().load("examples/sample_arguments/philosophy/free_will_exists")
+arg = Argument.from_directory("examples/sample_arguments/philosophy/free_will_exists")
 
 # Create policy
 policy = KnowItAllPolicy(arg)
@@ -255,13 +271,16 @@ policy = KnowItAllPolicy(arg)
 # Start dialog
 print(policy.start())
 
-# Process user input
-while True:
+# Process user input (generator/coroutine protocol)
+gen = policy.run_sync()
+response = next(gen)
+while response:
+    print(f"BOT: {response}")
     user_input = input("USER: ")
-    response = policy.handle_input(user_input)
-    
-    if response:
-        print(f"BOT: {response}")
+    try:
+        response = gen.send(user_input)
+    except StopIteration:
+        break
 ```
 
 ---
@@ -274,13 +293,15 @@ Arguments are plain text files in structured directories:
 argument_name/
 ├── intro.dialog              # Opening statement
 ├── conclusion.conclusion     # Final statement
-└── premise_name/
-    ├── description.premise   # Core claims (one per line)
-    ├── support.support       # Fallback arguments (optional)
-    ├── source.source         # Evidence URLs (optional)
-    ├── what                  # Explanations (optional)
-    ├── why                   # Explanations (optional)
-    └── how                   # Explanations (optional)
+└── premise_name/             # One subdirectory per premise
+    ├── premise_name.premise  # Core claims (one per line)
+    ├── premise_name.support  # Fallback arguments (optional)
+    ├── premise_name.source   # Evidence URLs (optional)
+    ├── premise_name.what     # Five-Ws explanations (optional)
+    ├── premise_name.why
+    ├── premise_name.how
+    ├── premise_name.when
+    └── premise_name.where
 ```
 
 Example:
@@ -289,11 +310,11 @@ free_will_exists/
 ├── intro.dialog
 ├── conclusion.conclusion
 ├── moral_responsibility/
-│   ├── description.premise
-│   └── support.support
+│   ├── moral_responsibility.premise
+│   └── moral_responsibility.support
 └── quantum_indeterminacy/
-    ├── description.premise
-    └── source.source
+    ├── quantum_indeterminacy.premise
+    └── quantum_indeterminacy.source
 ```
 
 ---
@@ -359,7 +380,7 @@ pytest test/test_validators.py -v
 pytest test/test_export.py -v
 ```
 
-**Current Status:** 517 tests passing ✅
+**Current Status:** 704 tests passing ✅
 
 ---
 
@@ -404,10 +425,14 @@ difficult_dialogs/
 │   ├── __init__.py          # Package exports
 │   ├── statements.py         # Statement dataclass
 │   ├── premises.py           # Premise dataclass
-│   ├── arguments.py          # Argument class + loader
-│   ├── policy.py             # Dialog policies
+│   ├── arguments.py          # Argument class + loader + diff
+│   ├── policy.py             # All 10 dialog policies + POLICY_REGISTRY
 │   ├── validators.py         # Quality validation
-│   ├── export.py             # JSON/SQLite export
+│   ├── export/
+│   │   ├── __init__.py       # Re-exports full public API
+│   │   ├── json.py           # JSON serialization
+│   │   ├── sqlite.py         # SQLite database
+│   │   └── markdown.py       # Markdown export
 │   ├── cli.py                # Command-line interface
 │   └── llm/
 │       ├── client.py         # HTTP client
@@ -416,17 +441,17 @@ difficult_dialogs/
 ├── examples/
 │   ├── sample_arguments/     # 32 pre-made arguments
 │   ├── streamlit_demo.py     # Web interface
-│   ├── generate_with_progress.py  # Enhanced generator
 │   └── run_argument.py       # Simple runner
 ├── test/
-│   ├── test_*.py             # 517 tests
-│   └── TEST_RESULTS.md       # Test reports
+│   └── test_*.py             # 704 tests
 ├── docs/
+│   ├── index.md              # Overview and navigation
+│   ├── argument-format.md    # File format reference
 │   ├── USER_GUIDE.md         # User manual
-│   └── DEVELOPER_GUIDE.md    # API reference
+│   ├── DEVELOPER_GUIDE.md    # API reference
+│   └── POLICIES.md           # Policy reference
 ├── pyproject.toml            # Build config
-├── readme.md                 # This file
-└── WHITEPAPER.md             # Technical details
+└── readme.md                 # This file
 ```
 
 ---

@@ -1,32 +1,42 @@
 # difficult_dialogs
 
-Structured argumentation framework for guided multi-turn dialogs. Premises are declared in plain text files; a policy engine drives the conversation by presenting statements, offering support when a user disagrees, and citing sources.
+Structured argumentation framework for guided multi-turn dialogs. Premises are
+declared in plain text files; a pluggable policy engine drives the conversation
+by presenting statements, offering support when a user disagrees, and citing sources.
 
-Zero external dependencies. Pure Python 3.10+.
+Zero external runtime dependencies. Pure Python 3.10+.
 
 ## Core concepts
 
 | Class | Module | Role |
 |---|---|---|
-| `Statement` | `statements.py` | A sentence with a truth value (`True`/`False`). |
-| `Premise` | `premises.py` | A named claim backed by a set of `Statement` objects. True iff all statements are true. |
-| `Argument` | `arguments.py` | A collection of `Premise` objects with an intro and a conclusion. Loaded from a directory. |
-| `BasePolicy` | `policy.py` | Drives a dialog loop: presents statements, collects agree/disagree feedback, advances premises. |
-| `KnowItAllPolicy` | `policy.py` | Extends `BasePolicy`: replies with support statements on disagreement; falls back to sources or concedes. |
+| `Statement` | `statements.py` | A sentence with an agreed/disagreed truth value. |
+| `Premise` | `premises.py` | A named claim backed by `Statement` objects. True iff all statements agreed. |
+| `Argument` | `arguments.py` | A collection of `Premise` objects with intro and conclusion. Loaded from a directory. |
+| `BasePolicy` | `policy.py` | Abstract base for dialog loops: presents statements, collects feedback, advances premises. |
+| `PolicyState` | `policy.py` | Serializable session state (spoken premises/statements, challenge count, finished flag). |
+
+10 concrete policies ship in `policy.py`: `KnowItAllPolicy`, `SilentPolicy`, `SocraticPolicy`,
+`DebatePolicy`, `ExploratoryPolicy`, `MaieuticPolicy`, `SkepticPolicy`, `TeacherPolicy`,
+`DebaterPolicy`, `MinimalistPolicy`.
 
 ## File format
 
-Arguments are directories. See [argument-format.md](argument-format.md) for full reference.
+Arguments are directories with one subdirectory per premise. See [argument-format.md](argument-format.md).
 
 ```
 my_argument/
-├── argument.intro        # Opening statement (optional)
-├── argument.conclusion   # Closing statement (optional)
-├── premise_1.premise     # Claim — each line is a Statement
-├── premise_1.support     # Comebacks if user disagrees
-├── premise_1.source      # Citations
-├── premise_2.premise
-└── ...
+├── intro.dialog              # Opening statement
+├── conclusion.conclusion     # Closing statement
+└── premise_name/
+    ├── premise_name.premise  # Core claims (one per line)
+    ├── premise_name.support  # Fallback comebacks (optional)
+    ├── premise_name.source   # Citation URLs (optional)
+    ├── premise_name.what     # Five-Ws explanations (optional)
+    ├── premise_name.why
+    ├── premise_name.how
+    ├── premise_name.when
+    └── premise_name.where
 ```
 
 ## Quick start
@@ -35,40 +45,29 @@ my_argument/
 from difficult_dialogs.arguments import Argument
 from difficult_dialogs.policy import KnowItAllPolicy
 
-arg = Argument(path="path/to/my_argument")
-dialog = KnowItAllPolicy(arg)
+arg = Argument.from_directory("path/to/my_argument")
+policy = KnowItAllPolicy(arg)
 
-dialog.start()          # speaks intro
-while not dialog.finished:
-    output = dialog._run_once()
-    if output:
-        print("BOT:", output)
-        user_input = input("USER: ")
-        if "y" in user_input.lower():
-            dialog.agree()
-        else:
-            dialog.disagree()
-dialog.end()            # speaks conclusion
+print(policy.start())
+for response in policy.run_sync():
+    print("BOT:", response)
+    user_input = input("USER: ")
+    policy.run_sync().send(user_input)
 ```
 
-### Async (threaded) loop
+## Export
 
 ```python
-dialog.run_async()
+from difficult_dialogs.export import export_to_json, export_to_markdown
 
-while True:
-    if dialog.output:
-        print("BOT:", dialog.output)
-        if dialog.finished:
-            break
-        dialog.submit_input(input("USER: "))
-dialog.stop()
+export_to_json(arg, "argument.json")
+md = export_to_markdown(arg)           # returns string; optionally writes file
+diff = arg.diff(updated_arg)           # {meta, added_premises, removed_premises, modified_premises}
 ```
-
-## LLM grounding use case
-
-The file-based format is naturally injectable into LLM prompts. Load the argument, call `arg.as_json()`, and pass the resulting structure as context to the LLM. The policy layer then acts as a constraint: the LLM generates natural language, the framework controls what claims are made and in what order.
 
 ## Navigation
 
 - [argument-format.md](argument-format.md) — full file format reference
+- [USER_GUIDE.md](USER_GUIDE.md) — end-user manual
+- [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md) — API reference
+- [POLICIES.md](POLICIES.md) — policy reference
