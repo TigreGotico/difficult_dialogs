@@ -220,10 +220,11 @@ class TestPolicyRegistry:
         assert type(policy1) == type(policy2)
     
     def test_invalid_policy_raises_error(self, sample_argument: Argument) -> None:
-        """Invalid name should raise ValueError."""
-        with pytest.raises(ValueError) as exc_info:
+        """Invalid name should raise InvalidPolicyError."""
+        from difficult_dialogs.exceptions import InvalidPolicyError
+        with pytest.raises(InvalidPolicyError) as exc_info:
             get_policy("nonexistent_policy", sample_argument)
-        
+
         assert "Unknown policy" in str(exc_info.value)
         assert "Available:" in str(exc_info.value)
 

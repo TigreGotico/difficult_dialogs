@@ -178,110 +178,70 @@ class BasePolicy(ABC):
         self.state.user_agrees = False
     
     def run_sync(self) -> Generator[str, str, None]:
-        """Run dialog synchronously.
-        
+        """Run dialog synchronously via Python's coroutine-send protocol.
+
+        Yields the intro first, then on each ``send()`` call passes the
+        received user text through ``handle_input()`` so that the active
+        policy's full logic runs — including Five-Ws dispatch, Socratic
+        questioning, debate challenges, etc.
+
+        Usage::
+
+            gen = policy.run_sync()
+            text = next(gen)          # receive intro
+            while True:
+                try:
+                    text = gen.send(input("> "))
+                    print(text)
+                except StopIteration:
+                    break
+
         Yields:
-            Bot statements.
-            
+            Bot responses (intro, statements with prompts, conclusion).
+
         Receives:
-            User input.
+            User input strings via ``send()``.
         """
-        yield self.start()
-        
-        while not self.state.finished:
-            result = self._get_next_statement()
-            
-            if result is None:
+        response: str | None = self.start()
+
+        while True:
+            if not response:
+                break
+            user_input = yield response
+            response = self.handle_input(user_input or "")
+            if self.state.finished or response is None:
                 yield self.end()
                 break
-            
-            premise_name, statement = result
-            yield f"{statement}\nDo you agree? (y/n) "
-            
-            # Wait for user input via send()
-            user_input = yield ""
-            
-            if user_input.lower().startswith('y'):
-                self.agree()
-            else:
-                self.disagree()
-                support = self._get_support()
-                if support:
-                    yield f"{support}\nDo you agree now? (y/n) "
-                    user_input = yield ""
-                    if user_input.lower().startswith('y'):
-                        self.agree()
-                    else:
-                        sources = self._get_sources()
-                        if sources:
-                            yield "Sources:\n" + "\n".join(sources) + "\nWe may need to agree to disagree."
-                        else:
-                            yield "I guess you may be right."
-                        self.agree()  # Move on
-    
-    async def run_async(self) -> AsyncGenerator[str, None]:
-        """Run dialog asynchronously.
-        
-        Yields:
-            Bot statements.
-        """
-        yield self.start()
-        
-        while not self.state.finished:
-            result = self._get_next_statement()
-            
-            if result is None:
-                yield self.end()
-                break
-            
-            premise_name, statement = result
-            yield f"{statement}\nDo you agree? (y/n) "
-            
-            # In real usage, await user input here
-            await asyncio.sleep(0)  # Yield control
-    
+
     async def stream(self, user_input_stream: asyncio.Queue[str]) -> AsyncGenerator[str, None]:
-        """Run dialog with async user input.
-        
+        """Run dialog asynchronously with a user-input queue.
+
+        Delegates each user message to ``handle_input()`` so that the active
+        policy's full logic applies — identical to ``run_sync`` but async.
+
         Args:
-            user_input_stream: Queue receiving user messages.
-            
+            user_input_stream: ``asyncio.Queue`` that receives user messages.
+
         Yields:
             Bot responses.
+
+        Example::
+
+            q: asyncio.Queue[str] = asyncio.Queue()
+            async for msg in policy.stream(q):
+                print(msg)
+                q.put_nowait(await get_user_input())
         """
         yield self.start()
-        
+
         while not self.state.finished:
-            result = self._get_next_statement()
-            
-            if result is None:
+            user_input = await user_input_stream.get()
+            response = self.handle_input(user_input)
+            if response:
+                yield response
+            if self.state.finished:
                 yield self.end()
                 break
-            
-            premise_name, statement = result
-            prompt = f"{statement}\nDo you agree? (y/n) "
-            yield prompt
-            
-            # Wait for user input
-            user_input = await user_input_stream.get()
-            
-            if user_input.lower().startswith('y'):
-                self.agree()
-            else:
-                self.disagree()
-                support = self._get_support()
-                if support:
-                    yield f"{support}\nDo you agree now? (y/n) "
-                    user_input = await user_input_stream.get()
-                    if user_input.lower().startswith('y'):
-                        self.agree()
-                    else:
-                        sources = self._get_sources()
-                        if sources:
-                            yield "Sources:\n" + "\n".join(sources) + "\nWe may need to agree to disagree."
-                        else:
-                            yield "I guess you may be right."
-                        self.agree()
 
 
 class KnowItAllPolicy(BasePolicy):

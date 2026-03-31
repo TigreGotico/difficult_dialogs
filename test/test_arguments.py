@@ -2,6 +2,7 @@
 import pytest
 from pathlib import Path
 from difficult_dialogs.arguments import Argument
+from difficult_dialogs.exceptions import ArgumentLoadError, ArgumentSaveError
 from difficult_dialogs.premises import Premise
 
 
@@ -71,16 +72,16 @@ def test_load_from_directory() -> None:
 
 
 def test_load_nonexistent_directory() -> None:
-    """Loading nonexistent directory raises FileNotFoundError."""
+    """Loading nonexistent directory raises ArgumentLoadError."""
     arg = Argument()
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(ArgumentLoadError):
         arg.load("/nonexistent/path")
 
 
 def test_load_file_instead_of_directory() -> None:
-    """Loading a file path raises ValueError."""
+    """Loading a file path raises ArgumentLoadError."""
     arg = Argument()
-    with pytest.raises(ValueError):
+    with pytest.raises(ArgumentLoadError):
         arg.load(__file__)
 
 
@@ -246,9 +247,9 @@ class TestArgumentSave:
         assert p2.where == ["Where observed."]
 
     def test_save_without_path_raises_when_no_source_path(self) -> None:
-        """save() with no path and no self.path raises ValueError."""
+        """save() with no path and no self.path raises ArgumentSaveError."""
         arg = Argument(name="test", intro="I.", conclusion="C.")
-        with pytest.raises(ValueError, match="No path specified"):
+        with pytest.raises(ArgumentSaveError, match="No path specified"):
             arg.save()
 
     def test_save_updates_self_path(self, tmp_path: Path) -> None:

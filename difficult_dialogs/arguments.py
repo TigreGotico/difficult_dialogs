@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from difficult_dialogs.exceptions import ArgumentLoadError, ArgumentSaveError
 from difficult_dialogs.premises import Premise
 
 
@@ -40,11 +41,6 @@ class Argument:
     conclusion: str = ""
     path: Path | None = field(default=None, init=False)
     _premises: dict[str, Premise] = field(default_factory=dict, repr=False)
-    
-    def __post_init__(self) -> None:
-        """Load argument if path was provided."""
-        if self.path:
-            self.load(self.path)
     
     @property
     def premises(self) -> list[Premise]:
@@ -143,16 +139,15 @@ class Argument:
             Self for method chaining.
             
         Raises:
-            FileNotFoundError: If path doesn't exist.
-            ValueError: If path is not a directory.
+            ArgumentLoadError: If path doesn't exist or is not a directory.
         """
         path = Path(path)
-        
+
         if not path.exists():
-            raise FileNotFoundError(f"Argument path does not exist: {path}")
-        
+            raise ArgumentLoadError(f"Argument path does not exist: {path}")
+
         if not path.is_dir():
-            raise ValueError(f"Argument path must be a directory: {path}")
+            raise ArgumentLoadError(f"Argument path must be a directory: {path}")
         
         self.path = path
         
@@ -302,7 +297,7 @@ class Argument:
         """
         dest = Path(path) if path is not None else self.path
         if dest is None:
-            raise ValueError(
+            raise ArgumentSaveError(
                 "No path specified and argument was not loaded from disk. "
                 "Pass an explicit path to save()."
             )

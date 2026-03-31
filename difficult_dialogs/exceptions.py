@@ -1,42 +1,35 @@
-class DifficultDialogsException(Exception):
-    """ something went wrong """
+"""Package-level exceptions for difficult_dialogs.
+
+Callers can catch these to distinguish framework errors from generic Python
+exceptions without importing internal modules.
+"""
+from __future__ import annotations
 
 
-class MissingStatementException(DifficultDialogsException):
-    """ expecting at least 1 statement object"""
+class DifficultDialogsError(Exception):
+    """Base exception for all difficult_dialogs errors."""
 
 
-class MissingAssertionException(DifficultDialogsException):
-    """ expecting at least 1 assertion object"""
+class ArgumentLoadError(DifficultDialogsError):
+    """Raised when an argument directory cannot be loaded or parsed."""
 
 
-class BadAssertionJson(DifficultDialogsException):
-    """ tried to create an assertion from bad json """
+class ArgumentSaveError(DifficultDialogsError):
+    """Raised when an argument cannot be saved to disk."""
 
 
-class BadArgumentJson(DifficultDialogsException):
-    """ tried to create an argument from bad json """
+class InvalidPolicyError(DifficultDialogsError):
+    """Raised when an unknown or invalid policy name is requested."""
 
 
-class UnrecognizedStatementFormat(DifficultDialogsException):
-    """ tried to create a statement from invalid input """
+class MissingStatementError(DifficultDialogsError):
+    """Raised when a premise has no statements but at least one is required."""
 
 
-class UnrecognizedSourceFormat(DifficultDialogsException):
-    """ tried to create a source from invalid input """
-
-
-class UnrecognizedArgumentFormat(DifficultDialogsException):
-    """ tried to create an argument from invalid input """
-
-
-class UnrecognizedIntroFormat(DifficultDialogsException):
-    """ tried to create an argument intro from invalid input """
-
-
-class UnrecognizedConclusionFormat(DifficultDialogsException):
-    """ tried to create an argument conclusion from invalid input """
-
-
-class UnrecognizedDescriptionFormat(DifficultDialogsException):
-    """ tried to add a description from invalid input """
+# ---------------------------------------------------------------------------
+# Legacy aliases — kept so any existing catch-sites still compile.
+# ---------------------------------------------------------------------------
+DifficultDialogsException = DifficultDialogsError  # old base name
+MissingStatementException = MissingStatementError
+UnrecognizedArgumentFormat = ArgumentLoadError
+BadArgumentJson = ArgumentLoadError

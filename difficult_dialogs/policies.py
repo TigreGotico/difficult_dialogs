@@ -12,6 +12,7 @@ from __future__ import annotations
 import random
 from typing import TYPE_CHECKING
 
+from difficult_dialogs.exceptions import InvalidPolicyError
 from difficult_dialogs.policy import BasePolicy
 
 if TYPE_CHECKING:
@@ -448,7 +449,7 @@ def get_policy(name: str, argument: Argument) -> BasePolicy:
     
     if name_lower not in POLICY_REGISTRY:
         available = ", ".join(POLICY_REGISTRY.keys())
-        raise ValueError(f"Unknown policy: {name_lower}. Available: {available}")
+        raise InvalidPolicyError(f"Unknown policy: {name_lower!r}. Available: {available}")
     
     policy_class = POLICY_REGISTRY[name_lower]
     return policy_class(argument)
