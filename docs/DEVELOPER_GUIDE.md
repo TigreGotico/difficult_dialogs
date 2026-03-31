@@ -55,22 +55,27 @@ difficult_dialogs/
 ├── __init__.py          # Public API exports
 ├── version.py           # OVOS version block + __version__
 ├── statements.py        # Statement dataclass
-├── premises.py          # Premise dataclass
-├── arguments.py         # Argument class + file I/O
-├── policy.py            # Policy ABC + 10 concrete implementations
-├── policies.py          # POLICY_REGISTRY helpers
+├── premises.py          # Premise dataclass (Six Ws: what/why/how/when/where/who)
+├── arguments.py         # Argument class + file I/O + merge()
+├── builder.py           # ArgumentBuilder / PremiseBuilder fluent API
+├── policy.py            # BasePolicy ABC + 10 concrete policies + AdaptivePolicy
+│                        # + WebhookPolicy + MultiArgumentPolicy
+├── library.py           # ArgumentLibrary — keyword search over argument dirs
 ├── validators.py        # Argument validation utilities
 ├── cli.py               # CLI entry point (dd / difficult-dialogs)
+├── server.py            # FastAPI REST server
 ├── exceptions.py        # Custom exceptions
 ├── export/
 │   ├── __init__.py
 │   ├── json.py          # JSON export
 │   ├── sqlite.py        # SQLite export
-│   └── markdown.py      # Markdown export
+│   ├── markdown.py      # Markdown export
+│   └── transcript.py    # Session transcript export (Markdown + JSON)
 └── llm/
     ├── __init__.py
-    ├── client.py        # HTTP client for LLM APIs
-    └── generator.py     # Argument generation
+    ├── client.py        # HTTP client for OpenAI-compatible LLM APIs
+    ├── generator.py     # Argument generation from topic string
+    └── enhancer.py      # Runtime statement rephrasing
 ```
 
 ---
@@ -167,6 +172,7 @@ class Premise:
         how (list[str]): "How" explanations.
         when (list[str]): Timing context.
         where (list[str]): Location context.
+        who (list[str]): "Who" context (who is affected / authorities).
     """
     
     @property
@@ -200,7 +206,10 @@ class Premise:
     
     def add_where(self, text: str) -> Premise:
         """Add location context."""
-    
+
+    def add_who(self, text: str) -> Premise:
+        """Add "who" context (who is affected / authorities)."""
+
     def get_next_statement(self, cache: set[str]) -> Statement | None:
         """Get next unspoken statement."""
     
@@ -343,6 +352,78 @@ with open("argument.json", "w") as f:
 
 arg2 = Argument.from_dict(data)
 ```
+
+---
+
+### ArgumentBuilder
+
+Fluent API for programmatic argument construction — `builder.py`.
+
+```python
+from difficult_dialogs.builder import ArgumentBuilder
+```
+
+#### Usage
+
+```python
+from difficult_dialogs.builder import ArgumentBuilder
+
+arg = (
+    ArgumentBuilder("climate_change")
+    .intro("Let's discuss climate change.")
+    .conclusion("The evidence is clear.")
+    .premise("human_causation")
+        .statement("97% of climate scientists agree.")
+        .support("See IPCC AR6.")
+        .source("https://www.ipcc.ch/")
+        .why("CO₂ traps heat in the atmosphere.")
+        .who("Climate scientists and IPCC working groups.")
+        .done()
+    .build()
+)
+```
+
+| Method | Returns | Notes |
+|---|---|---|
+| `ArgumentBuilder(name)` | `ArgumentBuilder` | Start building |
+| `.intro(text)` | `ArgumentBuilder` | Set opening statement |
+| `.conclusion(text)` | `ArgumentBuilder` | Set closing statement |
+| `.premise(name)` | `PremiseBuilder` | Begin a premise sub-builder |
+| `.add_premise(p)` | `ArgumentBuilder` | Attach a pre-built `Premise` |
+| `.build()` | `Argument` | Finish and return |
+| `PremiseBuilder.statement(text)` | `PremiseBuilder` | Add a core claim |
+| `PremiseBuilder.support(text)` | `PremiseBuilder` | Add a comeback |
+| `PremiseBuilder.source(url)` | `PremiseBuilder` | Add a citation |
+| `PremiseBuilder.what/why/how/when/where/who(text)` | `PremiseBuilder` | Six-Ws fields |
+| `PremiseBuilder.done()` | `ArgumentBuilder` | Return to parent builder |
+
+---
+
+### ArgumentLibrary
+
+Keyword search index over a directory of arguments — `library.py`.
+
+```python
+from difficult_dialogs.library import ArgumentLibrary, SearchResult
+```
+
+#### Usage
+
+```python
+lib = ArgumentLibrary("arguments/").scan()
+
+results: list[SearchResult] = lib.search("climate change", limit=5)
+for r in results:
+    print(r.argument.name, r.score)
+
+# By category (top-level subdirectory name)
+health_args = lib.by_category("health")
+
+# Direct access
+arg = lib.get("regular_exercise_improves_mental_health")
+```
+
+`ArgumentLibrary.scan()` — `library.py` — walks subdirectories, loads each `Argument`, and builds an in-memory index. Pass `reload=True` to rescan.
 
 ---
 
@@ -730,6 +811,14 @@ while not policy.state.finished:
     if response:
         print(response)
 ```
+
+### AdaptivePolicy, WebhookPolicy, MultiArgumentPolicy
+
+See [POLICIES.md](POLICIES.md) for full documentation of these meta-policies.
+
+- `AdaptivePolicy` — switches from one inner policy to another after N consecutive disagreements
+- `WebhookPolicy` — forwards turns to an HTTP endpoint with local fallback
+- `MultiArgumentPolicy` — chains multiple `Argument` objects into one session, advancing automatically
 
 ---
 

@@ -1246,6 +1246,81 @@ class WebhookPolicy(BasePolicy):
         return result
 
 
+class LLMEnhancedPolicy(BasePolicy):
+    """Wraps any policy and rephrases its responses via :class:`LLMEnhancer`.
+
+    The inner policy drives all dialog logic unchanged.  Each bot response is
+    passed through ``enhancer.rephrase()`` before being returned to the caller.
+    If the enhancer fails (network error, server down) the original text is
+    returned unchanged.
+
+    Args:
+        argument: Argument to discuss.
+        inner_policy: The policy that handles dialog logic.
+        enhancer: :class:`~difficult_dialogs.llm.enhancer.LLMEnhancer` instance.
+        style: Rephrasing style passed to ``enhancer.rephrase()``.
+            One of ``"conversational"``, ``"formal"``, ``"friendly"``, ``"academic"``.
+    """
+
+    def __init__(
+        self,
+        argument: Argument,
+        inner_policy: BasePolicy,
+        enhancer: object,  # LLMEnhancer — imported lazily to keep core offline
+        style: str = "conversational",
+    ) -> None:
+        super().__init__(argument)
+        self._inner = inner_policy
+        self._enhancer = enhancer
+        self._style = style
+
+    # ------------------------------------------------------------------ #
+    # BasePolicy interface
+    # ------------------------------------------------------------------ #
+
+    def start(self) -> str | None:
+        """Start inner policy and rephrase its intro."""
+        result = self._inner.start()
+        if result:
+            enhanced = self._rephrase(result)
+            self.state.transcript.append(TranscriptEntry(role="bot", text=enhanced))
+            return enhanced
+        return result
+
+    def handle_input(self, user_input: str) -> str | None:
+        """Delegate to inner policy; rephrase the response."""
+        self.state.transcript.append(TranscriptEntry(role="user", text=user_input))
+
+        response = self._inner.handle_input(user_input)
+
+        # Sync finished flag from inner
+        self.state.finished = self._inner.state.finished
+
+        if response:
+            enhanced = self._rephrase(response)
+            self.state.transcript.append(TranscriptEntry(role="bot", text=enhanced))
+            return enhanced
+        return response
+
+    def end(self) -> str | None:
+        """End inner policy and rephrase conclusion."""
+        result = self._inner.end()
+        if result:
+            return self._rephrase(result)
+        return result
+
+    # ------------------------------------------------------------------ #
+    # internal
+    # ------------------------------------------------------------------ #
+
+    def _rephrase(self, text: str) -> str:
+        """Rephrase *text* via the enhancer; return original on any failure."""
+        try:
+            return self._enhancer.rephrase(text, style=self._style)  # type: ignore[union-attr]
+        except Exception:
+            return text
+
+
 class MultiArgumentPolicy(BasePolicy):
     """Chains multiple arguments sequentially in a single dialog session.
 

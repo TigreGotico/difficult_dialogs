@@ -20,6 +20,9 @@
    - [TeacherPolicy](#teacherpolicy)
    - [DebaterPolicy](#debaterpolicy)
    - [MinimalistPolicy](#minimalistpolicy)
+   - [AdaptivePolicy](#adaptivepolicy)
+   - [WebhookPolicy](#webhookpolicy)
+   - [MultiArgumentPolicy](#multiargumentpolicy)
 4. [Policy Comparison Matrix](#policy-comparison-matrix)
 5. [When to Use Each Policy](#when-to-use-each-policy)
 6. [Creating Custom Policies](#creating-custom-policies)
@@ -605,6 +608,194 @@ Ignores agreement/disagreement signals and simply advances through all statement
 
 ---
 
+### AdaptivePolicy
+
+**Meta-policy that switches strategy after repeated disagreements**
+
+#### Behavior
+
+- Wraps two policies: an initial policy and a fallback policy
+- Counts consecutive disagreements via `challenge_count`
+- After `switch_threshold` consecutive disagreements, delegates all subsequent turns to the fallback policy
+- Useful for automatically softening tone or changing approach when a user is resistant
+
+#### Constructor
+
+```python
+AdaptivePolicy(
+    argument: Argument,
+    initial_policy: BasePolicy | None = None,   # default: KnowItAllPolicy
+    fallback_policy: BasePolicy | None = None,  # default: ExploratoryPolicy
+    switch_threshold: int = 3,
+)
+```
+
+#### Code Example
+
+```python
+from difficult_dialogs import Argument, AdaptivePolicy, KnowItAllPolicy, SocraticPolicy
+
+arg = Argument.from_directory("examples/sample_arguments/...")
+
+policy = AdaptivePolicy(
+    arg,
+    initial_policy=KnowItAllPolicy(arg),
+    fallback_policy=SocraticPolicy(arg),
+    switch_threshold=2,
+)
+policy.start()
+
+while not policy.state.finished:
+    response = policy.handle_input(input("USER: "))
+    print("BOT:", response)
+```
+
+#### When to Use
+
+✅ **Ideal for:**
+- Adaptive learning experiences
+- Long sessions where tone may need to soften
+- A/B-style fallback when evidence-based persuasion fails
+
+❌ **Avoid when:**
+- A single consistent tone is required throughout
+
+---
+
+### WebhookPolicy
+
+**Hybrid policy that forwards turns to an HTTP endpoint, with local fallback**
+
+#### Behavior
+
+- On each turn, POSTs `{user_input, argument_name, state}` as JSON to a configured webhook URL
+- If the webhook returns `{"response": "..."}` with HTTP 200, that text is used
+- If the webhook is unreachable or returns an error, delegates to a local fallback policy
+- Enables LLM-enhanced or server-side responses with graceful offline degradation
+
+#### Constructor
+
+```python
+WebhookPolicy(
+    argument: Argument,
+    webhook_url: str,
+    fallback_policy: BasePolicy | None = None,  # default: KnowItAllPolicy
+    timeout: float = 5.0,
+)
+```
+
+#### Webhook Request Format
+
+```json
+{
+  "user_input": "I disagree",
+  "argument_name": "climate_change",
+  "current_premise": "human_causation",
+  "challenge_count": 1
+}
+```
+
+#### Webhook Response Format
+
+```json
+{"response": "That's understandable. Consider that 97% of climate scientists agree..."}
+```
+
+Return `{"response": null}` or any non-200 status to trigger local fallback.
+
+#### Code Example
+
+```python
+from difficult_dialogs import Argument, WebhookPolicy
+
+arg = Argument.from_directory("my_argument")
+policy = WebhookPolicy(
+    arg,
+    webhook_url="http://localhost:5000/debate",
+    timeout=3.0,
+)
+policy.start()
+```
+
+#### When to Use
+
+✅ **Ideal for:**
+- LLM-enhanced responses with human-authored fallback
+- Server-side policy logic (A/B testing, personalization)
+- Gradual LLM integration without removing existing logic
+
+❌ **Avoid when:**
+- Offline-only deployment required
+- Latency is critical (adds network round-trip per turn)
+
+---
+
+### MultiArgumentPolicy
+
+**Chains multiple arguments into a single dialog session**
+
+#### Behavior
+
+- Accepts a sequence of `(Argument, policy_name)` pairs (or plain `Argument` list)
+- Presents the first argument using its assigned policy
+- When the current argument finishes, automatically advances to the next and calls `start()` on it
+- The outer `PolicyState.finished` is only set `True` after the last argument completes
+- The transcript accumulates across all arguments
+
+#### Constructor
+
+```python
+MultiArgumentPolicy(
+    arguments: list[Argument] | list[tuple[Argument, str | None]],
+    policy_class: type[BasePolicy] = KnowItAllPolicy,
+)
+```
+
+Each tuple is `(Argument, policy_name_string)`. Pass `None` as the policy name to use `policy_class`.
+
+#### Code Example
+
+```python
+from difficult_dialogs import Argument, MultiArgumentPolicy
+
+intro_arg  = Argument.from_directory("arguments/welcome")
+main_arg   = Argument.from_directory("arguments/climate_change")
+close_arg  = Argument.from_directory("arguments/call_to_action")
+
+policy = MultiArgumentPolicy(
+    [
+        (intro_arg,  "silent"),      # lecture-style intro
+        (main_arg,   "knowitall"),   # evidence-based main debate
+        (close_arg,  "minimalist"),  # brief closing
+    ]
+)
+
+policy.start()
+while not policy.state.finished:
+    response = policy.handle_input(input("USER: "))
+    if response:
+        print("BOT:", response)
+```
+
+#### Properties
+
+| Property | Type | Description |
+|---|---|---|
+| `current_argument` | `Argument` | The argument currently being presented |
+| `is_last` | `bool` | True when on the final argument |
+
+#### When to Use
+
+✅ **Ideal for:**
+- Multi-topic courses or curricula
+- Structured onboarding flows
+- Sequential debate rounds
+
+❌ **Avoid when:**
+- A single self-contained argument is sufficient
+
+---
+
 ## Policy Comparison Matrix
 
 | Feature | Silent | KnowItAll | Socratic | Debate | Exploratory |
@@ -618,6 +809,14 @@ Ignores agreement/disagreement signals and simply advances through all statement
 | **Source Citation** | ❌ | ✅ | ❌ | ✅ | ✅ |
 | **User Validation** | ❌ | ❌ | ❌ | ❌ | ✅ |
 | **Progress Guarantee** | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+### Extended Policy Comparison
+
+| Policy | Waits for Input | Uses Support | Uses Sources | Asks Questions | Five-Ws Support |
+|--------|----------------|--------------|--------------|----------------|-----------------|
+| AdaptivePolicy | Yes | Yes (via inner policy) | Yes | Depends on inner | Yes |
+| WebhookPolicy | Yes | Yes (fallback) | Yes (fallback) | No | No |
+| MultiArgumentPolicy | Yes | Yes (via inner) | Yes (via inner) | Depends on inner | Yes |
 
 ### Response Style Comparison
 

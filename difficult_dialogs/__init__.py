@@ -28,6 +28,7 @@ from difficult_dialogs.policy import (
     MinimalistPolicy,
     AdaptivePolicy,
     WebhookPolicy,
+    LLMEnhancedPolicy,
     MultiArgumentPolicy,
     PolicyState,
     POLICY_REGISTRY,
@@ -65,6 +66,7 @@ __all__ = [
     "MinimalistPolicy",
     "AdaptivePolicy",
     "WebhookPolicy",
+    "LLMEnhancedPolicy",
     "MultiArgumentPolicy",
     # Builder
     "ArgumentBuilder",
