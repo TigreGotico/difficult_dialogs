@@ -1246,6 +1246,106 @@ class WebhookPolicy(BasePolicy):
         return result
 
 
+class MultiArgumentPolicy(BasePolicy):
+    """Chains multiple arguments sequentially in a single dialog session.
+
+    Each argument is presented using its own inner policy.  When the current
+    argument is finished the dialog advances automatically to the next one.
+    The outer :attr:`state` reflects the overall session; each inner policy
+    maintains its own state.
+
+    Args:
+        arguments: Sequence of ``(argument, policy_name)`` pairs.  The first
+            element becomes the active argument immediately.
+        policy_class: Default policy class used for every argument when no
+            per-argument override is provided via the *arguments* sequence.
+    """
+
+    def __init__(
+        self,
+        arguments: list[tuple[Argument, str | None]] | list[Argument],
+        policy_class: type[BasePolicy] = KnowItAllPolicy,
+    ) -> None:
+        # Normalise: accept plain list[Argument] as well
+        normalised: list[tuple[Argument, type[BasePolicy]]] = []
+        for item in arguments:
+            if isinstance(item, tuple):
+                arg, policy_name = item
+                if policy_name is None:
+                    cls = policy_class
+                else:
+                    cls = POLICY_REGISTRY.get(policy_name.lower(), policy_class)
+            else:
+                arg, cls = item, policy_class
+            normalised.append((arg, cls))
+
+        if not normalised:
+            raise ValueError("MultiArgumentPolicy requires at least one argument.")
+
+        # Use the first argument as the nominal argument for BasePolicy.__init__
+        super().__init__(normalised[0][0])
+
+        self._sequence: list[tuple[Argument, type[BasePolicy]]] = normalised
+        self._index: int = 0
+        self._inner: BasePolicy = normalised[0][1](normalised[0][0])
+
+    # ------------------------------------------------------------------ #
+    # navigation helpers
+    # ------------------------------------------------------------------ #
+
+    def _advance(self) -> None:
+        """Move to the next argument in the sequence, if any."""
+        self._index += 1
+        if self._index < len(self._sequence):
+            arg, cls = self._sequence[self._index]
+            self._inner = cls(arg)
+            self._inner.start()
+
+    @property
+    def current_argument(self) -> Argument:
+        """The argument currently being discussed."""
+        return self._sequence[self._index][0]
+
+    @property
+    def is_last(self) -> bool:
+        """True when the active argument is the final one in the sequence."""
+        return self._index >= len(self._sequence) - 1
+
+    # ------------------------------------------------------------------ #
+    # BasePolicy interface
+    # ------------------------------------------------------------------ #
+
+    def start(self) -> str | None:
+        """Present the opening of the first argument."""
+        result = self._inner.start()
+        if result:
+            self.state.transcript.append(TranscriptEntry(role="bot", text=result))
+        return result
+
+    def handle_input(self, user_input: str) -> str | None:
+        """Delegate to the active inner policy; advance when it finishes."""
+        self.state.transcript.append(TranscriptEntry(role="user", text=user_input))
+
+        response = self._inner.handle_input(user_input)
+
+        if self._inner.state.finished and not self.is_last:
+            self._advance()
+            bridge = self._inner.start()
+            if bridge:
+                response = (response + "\n\n" + bridge) if response else bridge
+
+        if self._inner.state.finished and self.is_last:
+            self.state.finished = True
+
+        if response:
+            self.state.transcript.append(TranscriptEntry(role="bot", text=response))
+        return response
+
+    def end(self) -> str | None:
+        """Return the conclusion of the currently active argument."""
+        return self._inner.end()
+
+
 # Registry mapping lowercase names to policy classes.
 POLICY_REGISTRY: dict[str, type[BasePolicy]] = {
     "knowitall": KnowItAllPolicy,

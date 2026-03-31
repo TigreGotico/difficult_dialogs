@@ -28,12 +28,14 @@ from difficult_dialogs.policy import (
     MinimalistPolicy,
     AdaptivePolicy,
     WebhookPolicy,
+    MultiArgumentPolicy,
     PolicyState,
     POLICY_REGISTRY,
     get_policy,
 )
 
 from difficult_dialogs.library import ArgumentLibrary, SearchResult
+from difficult_dialogs.builder import ArgumentBuilder, PremiseBuilder
 from difficult_dialogs.version import __version__
 __all__ = [
     # Exceptions
@@ -63,6 +65,10 @@ __all__ = [
     "MinimalistPolicy",
     "AdaptivePolicy",
     "WebhookPolicy",
+    "MultiArgumentPolicy",
+    # Builder
+    "ArgumentBuilder",
+    "PremiseBuilder",
     # Library / search
     "ArgumentLibrary",
     "SearchResult",
