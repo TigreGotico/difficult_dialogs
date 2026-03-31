@@ -90,3 +90,67 @@ Audit log of AI-assisted changes to this repository.
 
 **Oversight:** Full automated test suite (571 tests) passed after each commit.
 Human review required before merging or publishing.
+
+---
+
+## 2026-03-31 (continued)
+
+**AI Model:** claude-sonnet-4-6
+
+### Changes
+
+11. **test: fill policies.py coverage gaps to 96%** (`test/test_policies.py`)
+    - 18 new tests across 6 new test classes covering uncovered branches:
+      `MaieuticPolicy` neutral-input and 5W dispatch, `SkepticPolicy` counter-premise
+      and default skepticism, `TeacherPolicy` example/fallback paths,
+      `DebaterPolicy` disagree double-down and attack-only, `MinimalistPolicy`
+      no-statements disagree and exhausted conclusion paths.
+    - policies.py 73% → 96%; suite 571 → 589 passing.
+
+12. **test: fill validators.py to 99%, premises.py to 100%** (`test/test_validators.py`, `test/test_premises.py`)
+    - Added `how`/`when`/`where` fields to `test_from_dict_roundtrip` — premises.py 89% → 100%.
+    - 26 new tests covering `ValidationIssue.__str__` for all four severities,
+      "Fair"/"Poor"/"Good" quality label branches, short-statement INFO,
+      long-intro INFO, many-statements WARNING, brief-description INFO,
+      duplicate-statements ERROR, empty-premise-name ERROR, invalid-URL WARNING,
+      `validate_directory` load-failure path.
+    - validators.py 89% → 99%; suite 589 → 605 passing.
+
+13. **test: fill export.py coverage gaps to 95%** (`test/test_export.py`)
+    - 5 new tests: `ArgumentEncoder` fallback, `get_argument()` None path,
+      `list_arguments()` category filter, `export_to_sqlite` with validation,
+      `export_library_to_json` skip-bad-dirs.
+    - export.py 93% → 95%; suite 605 → 610 passing.
+
+14. **test: fill policy.py coverage gaps to 99%** (`test/test_policy.py`)
+    - 15 new tests: `BasePolicy._get_support`/`_get_sources`/`_check_five_w`
+      null-return and stale-premise paths; 5W dispatch returns in `SocraticPolicy`,
+      `DebatePolicy`, `ExploratoryPolicy`, `KnowItAllPolicy`; neutral-advance
+      fallbacks; `KnowItAllPolicy` sources path; `run_sync` None-response break.
+    - policy.py 94% → 99%; suite 610 → 623 passing.
+
+15. **fix+test: cli.py 0% → 99%** (`difficult_dialogs/cli.py`, `test/test_cli.py`)
+    - 26 new tests calling `cmd_validate`, `cmd_export`, `cmd_list`, `cmd_debate`,
+      `cmd_generate` (mocked LLM) directly for coverage.
+    - **Bug fixed:** `cli.py:194` — stats `--stats` flag crashed with `TypeError`
+      when any argument had no category (None key in `by_category` dict).
+      Fixed: `k or 'uncategorized'` in the join.
+    - **Bug fixed:** `cli.py:234` — `get_policy()` raises `InvalidPolicyError`
+      (not `ValueError`); except clause widened to `Exception`.
+    - Total coverage 82% → 89%; suite 623 → 649 passing.
+
+16. **test: LLM module tests — client/generator/enhancer 18-26% → 94-100%**
+    (`test/test_llm.py`, new file)
+    - 31 new tests covering `LLMClient.generate` (with/without model, system prompt,
+      stop sequences), `generate_json` (fence stripping, schema, invalid-JSON error),
+      `health_check` (200 OK, /v1/models fallback, both endpoints fail),
+      `ArgumentGenerator.generate` pipeline (premises, sources, no-sources/no-counter,
+      server-unreachable, error fallbacks), `_slugify`, `LLMEnhancer.rephrase`
+      (cache hit, too-different fallback, exception fallback), `explain`,
+      `summarize_exchange`, `clear_cache`, `_is_too_different`.
+    - llm/client.py 26% → 100%, llm/generator.py 23% → 99%,
+      llm/enhancer.py 18% → 94%, llm/__init__.py 0% → 100%.
+    - Total coverage 89% → **98%**; suite 649 → **680 passing**.
+
+**Oversight:** Full automated test suite (680 tests) passed after each commit.
+Human review required before merging or publishing.
