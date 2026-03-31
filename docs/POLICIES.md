@@ -79,6 +79,9 @@ class BasePolicy(ABC):
 
     def start(self) -> str:
         """Return intro statement."""
+
+    def end(self) -> str:
+        """Set finished=True, return conclusion."""
         return str(self.argument.intro)
 ```
 

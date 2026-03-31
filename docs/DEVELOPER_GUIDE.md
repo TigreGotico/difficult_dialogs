@@ -619,6 +619,9 @@ class BasePolicy(ABC):
     def start(self) -> str:
         """Start dialog, return intro."""
 
+    def end(self) -> str:
+        """End dialog, set finished=True, return conclusion."""
+
     def agree(self) -> None:
         """Mark current premise as agreed."""
     
