@@ -534,3 +534,87 @@ class TestAdaptivePolicy:
         from difficult_dialogs.policy import get_policy, AdaptivePolicy
         p = get_policy("adaptive", sample_argument)
         assert isinstance(p, AdaptivePolicy)
+
+
+class TestWebhookPolicy:
+    """Tests for WebhookPolicy."""
+
+    def _make_mock_urllib(self, status: int = 200, body: dict | None = None) -> object:
+        """Return a mock urllib.request module that simulates HTTP responses."""
+        import json
+        from unittest.mock import MagicMock, patch
+
+        class FakeResponse:
+            def __init__(self) -> None:
+                self.status = status
+                self._body = json.dumps(body or {}).encode()
+
+            def read(self) -> bytes:
+                return self._body
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                pass
+
+        mock_urllib = MagicMock()
+        mock_urllib.Request = lambda url, **kw: url
+        mock_urllib.urlopen = MagicMock(return_value=FakeResponse())
+        return mock_urllib
+
+    def test_uses_webhook_response(self, sample_argument: Argument) -> None:
+        """When webhook returns 200, its response text is used."""
+        from difficult_dialogs.policy import WebhookPolicy
+        policy = WebhookPolicy(sample_argument, webhook_url="http://example.com/hook")
+        policy._urllib = self._make_mock_urllib(200, {"response": "webhook reply"})
+        policy.start()
+        result = policy.handle_input("yes")
+        assert result == "webhook reply"
+
+    def test_falls_back_on_failure(self, sample_argument: Argument) -> None:
+        """When webhook fails (exception), fallback policy is used."""
+        from unittest.mock import MagicMock
+        from difficult_dialogs.policy import WebhookPolicy
+        policy = WebhookPolicy(sample_argument, webhook_url="http://broken.invalid/hook")
+        mock_urllib = MagicMock()
+        mock_urllib.Request = lambda url, **kw: url
+        mock_urllib.urlopen = MagicMock(side_effect=OSError("connection refused"))
+        policy._urllib = mock_urllib
+        policy.start()
+        result = policy.handle_input("yes")
+        assert result is not None  # fallback responded
+
+    def test_falls_back_on_non_200(self, sample_argument: Argument) -> None:
+        """Non-200 status triggers fallback."""
+        from difficult_dialogs.policy import WebhookPolicy
+        policy = WebhookPolicy(sample_argument, webhook_url="http://example.com/hook")
+        policy._urllib = self._make_mock_urllib(503, {})
+        policy.start()
+        result = policy.handle_input("yes")
+        assert result is not None
+
+    def test_state_synced_after_fallback(self, sample_argument: Argument) -> None:
+        """Spoken premises/statements are updated after fallback handles a turn."""
+        from unittest.mock import MagicMock
+        from difficult_dialogs.policy import WebhookPolicy
+        policy = WebhookPolicy(sample_argument, webhook_url="http://broken.invalid/hook")
+        mock_urllib = MagicMock()
+        mock_urllib.Request = lambda url, **kw: url
+        mock_urllib.urlopen = MagicMock(side_effect=OSError("connection refused"))
+        policy._urllib = mock_urllib
+        policy.start()
+        policy.handle_input("yes")
+        # Fallback advanced the state — at least one premise/statement tracked
+        assert policy.state.spoken_premises or policy.state.spoken_statements
+
+    def test_custom_fallback_policy(self, sample_argument: Argument) -> None:
+        """Custom fallback_policy class is instantiated correctly."""
+        from unittest.mock import MagicMock
+        from difficult_dialogs.policy import WebhookPolicy, SilentPolicy
+        policy = WebhookPolicy(
+            sample_argument,
+            webhook_url="http://broken.invalid/hook",
+            fallback_policy=SilentPolicy,
+        )
+        assert isinstance(policy._fallback, SilentPolicy)

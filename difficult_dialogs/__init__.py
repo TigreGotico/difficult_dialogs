@@ -27,6 +27,7 @@ from difficult_dialogs.policy import (
     DebaterPolicy,
     MinimalistPolicy,
     AdaptivePolicy,
+    WebhookPolicy,
     PolicyState,
     POLICY_REGISTRY,
     get_policy,
@@ -60,6 +61,7 @@ __all__ = [
     "DebaterPolicy",
     "MinimalistPolicy",
     "AdaptivePolicy",
+    "WebhookPolicy",
     # Policy registry
     "POLICY_REGISTRY",
     "get_policy",

@@ -1081,6 +1081,106 @@ class AdaptivePolicy(BasePolicy):
         return response
 
 
+class WebhookPolicy(BasePolicy):
+    """Policy that forwards every turn to an external HTTP endpoint.
+
+    On each ``handle_input()`` call the policy POSTs a JSON payload to
+    *webhook_url* and uses the returned text as the bot response.  If the
+    request fails (network error, non-200 status) the *fallback_policy* is
+    invoked instead so the conversation never stalls.
+
+    Payload sent (POST, ``Content-Type: application/json``)::
+
+        {
+            "argument": "<argument name>",
+            "user_input": "<user text>",
+            "current_premise": "<premise name or null>",
+            "transcript": [{"role": "bot"|"user", "text": "…"}, …]
+        }
+
+    Expected response (JSON)::
+
+        {"response": "<bot reply text>"}
+
+    Best for: hybrid LLM-enhanced deployments where structured fallback is
+    required but natural language variety is desired at runtime.
+
+    Args:
+        argument: Argument to present.
+        webhook_url: HTTP(S) endpoint that receives turn payloads.
+        fallback_policy: Policy class used when webhook call fails.
+        timeout: Request timeout in seconds (default 10).
+    """
+
+    def __init__(
+        self,
+        argument: Argument,
+        webhook_url: str,
+        fallback_policy: type[BasePolicy] = KnowItAllPolicy,
+        timeout: float = 10.0,
+    ) -> None:
+        import urllib.request as _urllib
+        super().__init__(argument)
+        self.webhook_url = webhook_url
+        self.timeout = timeout
+        self._fallback = fallback_policy(argument)
+        self._urllib = _urllib
+
+    def _sync_fallback_state(self) -> None:
+        """Mirror current state into the fallback policy."""
+        self._fallback.state.spoken_premises = self.state.spoken_premises
+        self._fallback.state.spoken_statements = self.state.spoken_statements
+        self._fallback.state.current_premise = self.state.current_premise
+        self._fallback.state.user_agrees = self.state.user_agrees
+        self._fallback.state.finished = self.state.finished
+        self._fallback.state.challenge_count = self.state.challenge_count
+
+    def _call_webhook(self, user_input: str) -> str | None:
+        """POST to webhook and return response text, or None on failure."""
+        import json as _json
+        payload = _json.dumps({
+            "argument": self.argument.name,
+            "user_input": user_input,
+            "current_premise": self.state.current_premise,
+            "transcript": [
+                {"role": e.role, "text": e.text}
+                for e in self.state.transcript
+            ],
+        }).encode()
+
+        req = self._urllib.Request(
+            self.webhook_url,
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with self._urllib.urlopen(req, timeout=self.timeout) as resp:
+                if resp.status != 200:
+                    return None
+                body = _json.loads(resp.read())
+                return body.get("response")
+        except Exception:
+            return None
+
+    def handle_input(self, user_input: str) -> str | None:
+        """Forward turn to webhook; fall back to local policy on failure."""
+        response = self._call_webhook(user_input)
+        if response is not None:
+            return response
+        # Webhook unavailable — delegate to fallback
+        self._sync_fallback_state()
+        result = self._fallback.handle_input(user_input)
+        # Pull back any state changes made by fallback
+        self.state.spoken_premises = self._fallback.state.spoken_premises
+        self.state.spoken_statements = self._fallback.state.spoken_statements
+        self.state.current_premise = self._fallback.state.current_premise
+        self.state.user_agrees = self._fallback.state.user_agrees
+        self.state.finished = self._fallback.state.finished
+        self.state.challenge_count = self._fallback.state.challenge_count
+        return result
+
+
 # Registry mapping lowercase names to policy classes.
 POLICY_REGISTRY: dict[str, type[BasePolicy]] = {
     "knowitall": KnowItAllPolicy,
@@ -1094,6 +1194,7 @@ POLICY_REGISTRY: dict[str, type[BasePolicy]] = {
     "debater": DebaterPolicy,
     "minimalist": MinimalistPolicy,
     "adaptive": AdaptivePolicy,
+    # WebhookPolicy intentionally excluded — requires webhook_url constructor arg
 }
 
 
