@@ -23,6 +23,7 @@
    - [AdaptivePolicy](#adaptivepolicy)
    - [WebhookPolicy](#webhookpolicy)
    - [MultiArgumentPolicy](#multiargumentpolicy)
+   - [LLMEnhancedPolicy](#llmenhancedpolicy)
 4. [Policy Comparison Matrix](#policy-comparison-matrix)
 5. [When to Use Each Policy](#when-to-use-each-policy)
 6. [Creating Custom Policies](#creating-custom-policies)
@@ -796,6 +797,62 @@ while not policy.state.finished:
 
 ---
 
+### LLMEnhancedPolicy
+
+**Wrapper policy that rephrases bot responses via an LLM at runtime**
+
+#### Behavior
+
+- Wraps any `BasePolicy` without changing its dialog logic
+- Every bot response is passed to `LLMEnhancer.rephrase()` before delivery
+- If the LLM server is unavailable the original text is returned unchanged (graceful degradation)
+- Session transcript records the enhanced (rephrased) text, not the originals
+
+#### Constructor
+
+```python
+LLMEnhancedPolicy(
+    argument: Argument,
+    inner_policy: BasePolicy,
+    enhancer: LLMEnhancer,
+    style: str = "conversational",  # "conversational" | "formal" | "friendly" | "academic"
+)
+```
+
+#### Code Example
+
+```python
+from difficult_dialogs import Argument
+from difficult_dialogs.policy import LLMEnhancedPolicy, KnowItAllPolicy
+from difficult_dialogs.llm import LLMEnhancer
+
+arg = Argument.from_directory("arguments/climate_change")
+enhancer = LLMEnhancer("http://localhost:8000")
+
+policy = LLMEnhancedPolicy(
+    arg,
+    inner_policy=KnowItAllPolicy(arg),
+    enhancer=enhancer,
+    style="friendly",
+)
+policy.start()
+```
+
+#### When to Use
+
+✅ **Ideal for:**
+- Adding natural language variety to pre-authored responses
+- Matching a specific tone (formal, academic, friendly, conversational)
+- Gradual LLM integration without modifying argument content
+- Offline-first architectures where LLM is an optional enhancement
+
+❌ **Avoid when:**
+- Deterministic, auditable output is required (rephrased text varies per call)
+- Latency is critical (adds one LLM round-trip per turn)
+- The deployment is fully offline with no LLM server
+
+---
+
 ## Policy Comparison Matrix
 
 | Feature | Silent | KnowItAll | Socratic | Debate | Exploratory |
@@ -817,6 +874,7 @@ while not policy.state.finished:
 | AdaptivePolicy | Yes | Yes (via inner policy) | Yes | Depends on inner | Yes |
 | WebhookPolicy | Yes | Yes (fallback) | Yes (fallback) | No | No |
 | MultiArgumentPolicy | Yes | Yes (via inner) | Yes (via inner) | Depends on inner | Yes |
+| LLMEnhancedPolicy | Yes | Yes (via inner) | Yes (via inner) | Depends on inner | Yes |
 
 ### Response Style Comparison
 

@@ -1,10 +1,9 @@
-# Difficult Dialogs
+# difficult_dialogs
 
-**Compile LLM knowledge into portable, deterministic debate modules.**
+**Structured argumentation framework — compile knowledge once, run debates forever.**
 
-[![Tests](https://img.shields.io/badge/tests-678%20passed-brightgreen)]()
-[![Type Checked](https://img.shields.io/badge/mypy-strict-blue)]()
-[![Linting](https://img.shields.io/badge/ruff-passed-green)]()
+[![Tests](https://img.shields.io/badge/tests-794%20passed-brightgreen)]()
+[![Coverage](https://img.shields.io/badge/coverage-97%25-green)]()
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)]()
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue)]()
 
@@ -12,355 +11,309 @@
 
 ## The Problem
 
-LLMs are great for debates, but they're:
-- ❌ **Expensive** at scale ($0.15 per 10-turn debate)
-- ❌ **Unreliable** (hallucinate mid-conversation)
-- ❌ **Slow** (2-5s latency per response)
-- ❌ **Online-only** (need API access)
+LLMs are great for debates, but they:
+- ❌ Hallucinate facts mid-conversation
+- ❌ Cost money per call at scale
+- ❌ Add 2–5 s latency per turn
+- ❌ Require network access
 
 ## The Solution
 
-**Generate once with an LLM, run forever without one.**
+**Generate arguments once with an LLM. Run them forever without one.**
 
 ```
-┌─────────────────────┐      ┌──────────────────┐      ┌─────────────────┐
-│   LLM (one-time)    │      │  File Format     │      │  Interpreter    │
-│                     │      │  (.premise,      │      │  (dumb, fast,   │
-│  Generate argument  │─────▶│   .support,      │─────▶│   deterministic)│
-│  structure          │      │   .source)       │      │                 │
-└─────────────────────┘      └──────────────────┘      └─────────────────┘
-     ~60 seconds               Portable                   Microseconds
-     Smart                      Auditable                  Offline
-     One-time                   Versionable                Infinite runs
+┌──────────────────┐     ┌──────────────────────┐     ┌───────────────────┐
+│  LLM (one-time)  │     │  Plain-text files     │     │  Policy engine    │
+│  generate once   │────▶│  .premise  .support   │────▶│  deterministic    │
+│  ~60 s / topic   │     │  .source   .why  .who │     │  <1 ms / turn     │
+└──────────────────┘     └──────────────────────┘     └───────────────────┘
+      Smart                  Auditable, git-friendly       Offline, free
+```
+
+Optionally layer an `LLMEnhancedPolicy` on top to rephrase responses at runtime — without changing the locked argument structure.
+
+---
+
+## Install
+
+```bash
+uv pip install difficult-dialogs                  # core (zero runtime deps)
+uv pip install "difficult-dialogs[server]"        # + FastAPI REST server
+uv pip install "difficult-dialogs[dev]"           # + pytest, ruff, mypy
+```
+
+Python 3.10+. No mandatory runtime dependencies.
+
+---
+
+## Quick start
+
+### CLI
+
+```bash
+dd debate    examples/i_think_therefore_i_am        # interactive debate
+dd list      examples/sample_arguments              # browse library
+dd validate  examples/sample_arguments              # quality report
+dd serve     --port 8080                            # REST API server
+dd generate  "Solar energy is cost-effective" \
+             --server http://localhost:8000          # LLM-generate an argument
+```
+
+### Python
+
+```python
+from difficult_dialogs import Argument, KnowItAllPolicy
+
+arg = Argument.from_directory("examples/i_think_therefore_i_am")
+policy = KnowItAllPolicy(arg)
+
+print(policy.start())
+
+gen = policy.run_sync()
+response = next(gen)
+while response:
+    print("BOT:", response)
+    try:
+        response = gen.send(input("USER: "))
+    except StopIteration:
+        break
+```
+
+### Fluent builder
+
+```python
+from difficult_dialogs.builder import ArgumentBuilder
+
+arg = (
+    ArgumentBuilder("climate_change")
+    .intro("Let's discuss climate change.")
+    .conclusion("The evidence is clear.")
+    .premise("human_causation")
+        .statement("97% of climate scientists agree.")
+        .support("See IPCC AR6.")
+        .source("https://www.ipcc.ch/")
+        .why("CO₂ traps heat in the atmosphere.")
+        .who("Climate scientists and IPCC working groups.")
+        .done()
+    .build()
+)
 ```
 
 ---
 
-## Quick Start (5 Minutes)
+## File format
 
-### 1. Install
+Arguments are plain-text directories — one subdirectory per premise:
 
-```bash
-pip install difficult-dialogs
+```
+argument_name/
+├── intro.dialog              # Opening statement
+├── conclusion.conclusion     # Closing statement
+└── premise_name/
+    ├── premise_name.premise  # Core claims (one per line)
+    ├── premise_name.support  # Comeback arguments (optional)
+    ├── premise_name.source   # Citation URLs (optional)
+    ├── premise_name.what     # Six-Ws contextual fields (optional)
+    ├── premise_name.why
+    ├── premise_name.how
+    ├── premise_name.when
+    ├── premise_name.where
+    └── premise_name.who
 ```
 
-Requires Python 3.10+
-
-### 2. Try the CLI
-
-```bash
-# List available arguments
-difficult-dialogs list examples/sample_arguments
-
-# Validate quality
-difficult-dialogs validate examples/sample_arguments
-
-# Run a debate
-difficult-dialogs debate examples/sample_arguments/philosophy/free_will_exists
-```
-
-### 3. Web Interface (Optional)
-
-```bash
-# Install Streamlit
-pip install streamlit
-
-# Launch web demo
-streamlit run examples/streamlit_demo.py
-```
-
-Opens at `http://localhost:8501` with beautiful UI for browsing and debating.
+UTF-8, one entry per line. Works with `git diff`, `grep`, any text editor.
+Full reference: [docs/argument-format.md](docs/argument-format.md)
 
 ---
 
-## Features
+## Policies
 
-### ✅ Complete Tool Suite
+Policies are the "personality" of the dialog. The argument content never changes.
 
-- **CLI Tool** - Generate, validate, export, debate from command line
-- **Web Demo** - Streamlit-based interactive interface  
-- **Python API** - Full programmatic control
-- **Export Formats** - JSON bundles, SQLite databases, Markdown documents
-- **Validation** - Quality scoring and issue detection
+| Policy | Style | Uses support | Asks questions |
+|---|---|---|---|
+| `KnowItAllPolicy` | Persuasive — corrects with evidence | ✅ | ❌ |
+| `SilentPolicy` | Lecture — no interaction | ❌ | ❌ |
+| `SocraticPolicy` | Questioning — Socratic method | ✅ | ✅ |
+| `DebatePolicy` | Adversarial — challenges user | ✅ | ✅ |
+| `ExploratoryPolicy` | Neutral — presents multiple sides | ✅ | ✅ |
+| `MaieuticPolicy` | Guided discovery | ✅ | ✅ |
+| `SkepticPolicy` | Doubting — user must prove it | ✅ | ✅ |
+| `TeacherPolicy` | Educational — lesson structure | ✅ | ✅ |
+| `DebaterPolicy` | Formal debate rules | ✅ | ✅ |
+| `MinimalistPolicy` | Terse confirmations only | ❌ | ❌ |
+| `AdaptivePolicy` | Switches policy after N disagreements | via inner | via inner |
+| `WebhookPolicy` | Forwards to HTTP endpoint, local fallback | ✅ | ❌ |
+| `LLMEnhancedPolicy` | Rephrases responses via LLM at runtime | via inner | via inner |
+| `MultiArgumentPolicy` | Chains multiple arguments sequentially | via inner | via inner |
 
-### ✅ Rich Sample Library
+```python
+from difficult_dialogs import get_policy, Argument
 
-**32 pre-generated arguments** across 6 categories:
-- 💻 Technology (5 args) - AI, open source, privacy, remote work, social media
-- 🔬 Science (5 args) - Climate change, space exploration, vaccines, genetics, renewable energy
-- 🏥 Health (6 args) - Exercise, diet, sleep, meditation, preventive care
-- 🌍 Society (6 args) - UBI, education, transportation, recycling, volunteering
-- 🤔 Philosophy (5 args) - Cogito, free will, happiness, knowledge, ethics
-- 📚 Education (5 args) - Critical thinking, testing, lifelong learning, teacher pay, online learning
-
-### ✅ Quality Assurance
-
-- **678 automated tests** (100% pass rate)
-- **Validation framework** with scoring (0.0-1.0)
-- **Quality labels**: Excellent ⭐, Good 👍, Fair 😐, Poor ❌
-- **All 32 sample arguments**: Excellent quality (1.00 avg score)
-
-### ✅ Developer Friendly
-
-- **Zero runtime dependencies** (only requests for LLM generation)
-- **Type hints** throughout (mypy strict mode)
-- **Well tested** (pytest suite)
-- **Clean API** with dataclasses
-- **Comprehensive docs** (inline + markdown)
-
----
-
-## CLI Commands
-
-### Generate Arguments
-
-```bash
-# Generate single topic
-difficult-dialogs generate "AI benefits humanity" \
-  --server http://localhost:8000 \
-  --model qwen-72b \
-  --output my_arguments
-
-# Generate multiple topics
-difficult-dialogs generate "Topic 1" "Topic 2" "Topic 3" \
-  --stance pro \
-  --depth 2 \
-  --validate
-
-# With progress bar (install tqdm first)
-pip install tqdm
-difficult-dialogs generate "Topic 1" "Topic 2" -v
+arg = Argument.from_directory("my_argument")
+policy = get_policy("socratic", arg)   # by name via POLICY_REGISTRY
 ```
 
-### Validate Quality
+Full reference: [docs/POLICIES.md](docs/POLICIES.md)
 
-```bash
-# Validate entire library
-difficult-dialogs validate examples/sample_arguments
+### LLMEnhancedPolicy
 
-# Verbose mode (show issues)
-difficult-dialogs validate examples/sample_arguments --verbose
+Add natural language variety to any policy without changing its argument logic:
+
+```python
+from difficult_dialogs.policy import LLMEnhancedPolicy, KnowItAllPolicy
+from difficult_dialogs.llm import LLMEnhancer
+
+enhancer = LLMEnhancer("http://localhost:8000", model="qwen-7b")
+policy = LLMEnhancedPolicy(
+    arg,
+    inner_policy=KnowItAllPolicy(arg),
+    enhancer=enhancer,
+    style="friendly",   # "conversational" | "formal" | "friendly" | "academic"
+)
 ```
 
-### Export
+Falls back silently to original text if the LLM server is unreachable.
 
-```bash
-# Export to JSON bundle
-difficult-dialogs export examples/sample_arguments library.json
+### AdaptivePolicy
 
-# Export to SQLite database
-difficult-dialogs export examples/sample_arguments library.db --stats
+Automatically softens approach when the user keeps disagreeing:
 
-# Without validation data
-difficult-dialogs export examples/sample_arguments library.json --no-validation
+```python
+from difficult_dialogs import AdaptivePolicy, KnowItAllPolicy, ExploratoryPolicy
+
+policy = AdaptivePolicy(
+    arg,
+    initial_policy=KnowItAllPolicy(arg),
+    fallback_policy=ExploratoryPolicy(arg),
+    switch_threshold=3,
+)
 ```
 
-### Debate
+### MultiArgumentPolicy
 
-```bash
-# Interactive debate
-difficult-dialogs debate examples/sample_arguments/science/space_exploration
+Chain multiple arguments into one session:
 
-# Or use short alias
-dd debate examples/sample_arguments/health/regular_exercise_improves_mental_health
-```
+```python
+from difficult_dialogs import MultiArgumentPolicy
 
-### List Available
-
-```bash
-# List all arguments
-difficult-dialogs list examples/sample_arguments
-
-# Output:
-# TECHNOLOGY (5):
-#   • Artificial Intelligence Will Benefit Humanity
-#   • Open Source Software Is Superior To Proprietary
-#   ...
+policy = MultiArgumentPolicy(
+    [(intro_arg, "silent"), (main_arg, "knowitall"), (close_arg, "minimalist")]
+)
 ```
 
 ---
 
-## Python API
+## Session state & transcripts
 
-### Generate with LLM
+```python
+# Save
+state_dict = policy.state.to_dict()   # JSON-safe dict
+
+# Restore
+policy.restore_state(state_dict)
+
+# Export transcript
+from difficult_dialogs.export.transcript import export_transcript_to_markdown
+md = export_transcript_to_markdown(policy, title="Session 1")
+```
+
+---
+
+## Argument library search
+
+```python
+from difficult_dialogs.library import ArgumentLibrary
+
+lib = ArgumentLibrary("arguments/").scan()
+results = lib.search("climate change", limit=5)
+for r in results:
+    print(r.argument.name, r.score)
+
+lib.by_category("health")    # all arguments in a top-level subdirectory
+lib.get("free_will_exists")  # direct lookup by name
+```
+
+---
+
+## Export
+
+```python
+from difficult_dialogs.export import export_to_json, export_to_markdown
+from difficult_dialogs.export.sqlite import LibraryDatabase
+
+export_to_json(arg, "argument.json")
+export_to_markdown(arg, "argument.md")
+
+db = LibraryDatabase("library.db")
+db.add_argument(arg, category="philosophy")
+db.close()
+
+# Argument diff — review LLM-generated changes before committing
+diff = original.diff(updated)
+# {"meta": ..., "added_premises": [...], "removed_premises": [...], "modified_premises": {...}}
+```
+
+---
+
+## LLM generation
+
+Requires an OpenAI-compatible server (Ollama, llama.cpp, OpenAI API, etc.):
 
 ```python
 from difficult_dialogs.llm import ArgumentGenerator
 
-gen = ArgumentGenerator("http://localhost:8000")
-
-arg = gen.generate(
-    topic="Solar energy is cost-effective",
-    stance="pro",
-    depth=2,
-    include_sources=True
-)
-
-print(f"Generated {len(arg.premises)} premises")
+gen = ArgumentGenerator("http://localhost:8000", model="qwen-72b")
+arg = gen.generate("Solar energy is cost-effective", stance="pro", depth=2)
+arg.save("arguments/solar_energy")
 ```
 
-### Validate
+Or from the CLI:
+
+```bash
+dd generate "Solar energy is cost-effective" \
+  --server http://localhost:11434 \
+  --model qwen-72b \
+  --output arguments/
+```
+
+**Supported servers:**
+```bash
+ollama serve                                               # http://localhost:11434
+./llama-server -m model.gguf --host 0.0.0.0 --port 8000   # http://localhost:8000
+# OpenAI: --server https://api.openai.com/v1 --model gpt-4o
+```
+
+---
+
+## REST server
+
+```bash
+dd serve --host 0.0.0.0 --port 8080
+```
+
+| Endpoint | Description |
+|---|---|
+| `POST /sessions` | Create session (`argument_path`, `policy`) |
+| `POST /sessions/{id}/chat` | Send turn (`user_input`) |
+| `GET  /sessions/{id}` | Full session info |
+| `GET  /sessions/{id}/state` | Serialized `PolicyState` |
+| `PUT  /sessions/{id}/state` | Restore saved state |
+| `DELETE /sessions/{id}` | End session |
+| `GET  /arguments` | List available argument directories |
+
+---
+
+## Validation
 
 ```python
 from difficult_dialogs.validators import validate_argument, get_quality_label
 
 result = validate_argument(arg)
-
-print(f"Score: {result.score:.2f}")
-print(f"Passed: {result.passed}")
-print(f"Quality: {get_quality_label(result.score)}")
-
+print(result.score)                     # 0.0–1.0
+print(get_quality_label(result.score))  # "Excellent ⭐" | "Good 👍" | "Fair 😐" | "Poor ❌"
 for issue in result.issues:
-    print(f"  {issue}")
-```
-
-### Export
-
-```python
-from difficult_dialogs.export import (
-    export_to_json,
-    export_library_to_json,
-    export_to_markdown,
-    LibraryDatabase,
-)
-
-# Single argument to JSON
-export_to_json(arg, "my_argument.json")
-
-# Entire library to JSON bundle
-export_library_to_json("examples/sample_arguments", "library.json")
-
-# Human-readable Markdown (returns string; writes file when path given)
-md = export_to_markdown(arg)
-export_to_markdown(arg, "my_argument.md")
-
-# Export to SQLite
-db = LibraryDatabase("library.db")
-db.add_argument(arg, category="energy")
-
-stats = db.get_statistics()
-print(f"Total: {stats['total_arguments']}")
-print(f"By category: {stats['by_category']}")
-
-db.close()
-```
-
-### Compare Argument Versions
-
-```python
-# Review LLM-generated changes before committing
-diff = original.diff(updated)
-print(diff["meta"])               # changed name/intro/conclusion
-print(diff["added_premises"])     # new premise names
-print(diff["removed_premises"])   # deleted premise names
-print(diff["modified_premises"])  # {name: {added_statements, removed_statements}}
-```
-
-### Run Debate Programmatically
-
-```python
-from difficult_dialogs.arguments import Argument
-from difficult_dialogs.policy import KnowItAllPolicy
-
-# Load argument
-arg = Argument.from_directory("examples/sample_arguments/philosophy/free_will_exists")
-
-# Create policy
-policy = KnowItAllPolicy(arg)
-
-# Start dialog
-print(policy.start())
-
-# Process user input (generator/coroutine protocol)
-gen = policy.run_sync()
-response = next(gen)
-while response:
-    print(f"BOT: {response}")
-    user_input = input("USER: ")
-    try:
-        response = gen.send(user_input)
-    except StopIteration:
-        break
-```
-
----
-
-## File Structure
-
-Arguments are plain text files in structured directories:
-
-```
-argument_name/
-├── intro.dialog              # Opening statement
-├── conclusion.conclusion     # Final statement
-└── premise_name/             # One subdirectory per premise
-    ├── premise_name.premise  # Core claims (one per line)
-    ├── premise_name.support  # Fallback arguments (optional)
-    ├── premise_name.source   # Evidence URLs (optional)
-    ├── premise_name.what     # Five-Ws explanations (optional)
-    ├── premise_name.why
-    ├── premise_name.how
-    ├── premise_name.when
-    └── premise_name.where
-```
-
-Example:
-```
-free_will_exists/
-├── intro.dialog
-├── conclusion.conclusion
-├── moral_responsibility/
-│   ├── moral_responsibility.premise
-│   └── moral_responsibility.support
-└── quantum_indeterminacy/
-    ├── quantum_indeterminacy.premise
-    └── quantum_indeterminacy.source
-```
-
----
-
-## Comparison
-
-| Feature | Difficult Dialogs | Raw LLM API | Other Debate Tools |
-|---------|------------------|-------------|-------------------|
-| **Cost per debate** | $0 (after generation) | $0.10-0.50 | Varies |
-| **Latency** | <1ms | 2-5s | 1-3s |
-| **Offline** | ✅ Yes | ❌ No | ❌ No |
-| **Hallucinations** | ❌ None | ✅ Possible | ⚠️ Sometimes |
-| **Auditable** | ✅ Full file format | ❌ Black box | ⚠️ Limited |
-| **Versionable** | ✅ Git-friendly | ❌ API-dependent | ⚠️ Database |
-| **Customizable** | ✅ Edit files | ⚠️ Prompt only | ❌ Fixed |
-| **Language** | Any (LLM choice) | Any | Usually English |
-
----
-
-## Installation
-
-### Basic Install
-
-```bash
-pip install difficult-dialogs
-```
-
-### With Extras
-
-```bash
-# Development tools
-pip install difficult-dialogs[dev]
-
-# Web interface
-pip install difficult-dialogs[web]
-
-# All extras
-pip install difficult-dialogs[all]
-```
-
-### From Source
-
-```bash
-git clone https://github.com/TigreGotico/difficult_dialogs
-cd difficult_dialogs
-uv pip install -e ".[dev]"
+    print(issue)
 ```
 
 ---
@@ -368,158 +321,78 @@ uv pip install -e ".[dev]"
 ## Testing
 
 ```bash
-# Run all tests
 uv run pytest test/ -v
-
-# With coverage
-uv run pytest test/ --cov=difficult_dialogs --cov-report=html
-
-# Specific test categories
-uv run pytest test/test_cli.py -v
-uv run pytest test/test_validators.py -v
-uv run pytest test/test_export.py -v
+uv run pytest test/ --cov=difficult_dialogs --cov-report=term-missing
 ```
 
-**Current status:** 678 tests passing ✅
+**794 tests, 97% average coverage.**
 
 ---
 
-## Configuration
-
-### LLM Server Setup
-
-Works with any OpenAI-compatible server:
-
-**Llama.cpp:**
-```bash
-./server -m models/qwen-72b.gguf --host 0.0.0.0 --port 8000
-```
-
-**Ollama:**
-```bash
-ollama serve
-# Default: http://localhost:11434
-```
-
-**OpenAI:**
-```bash
-export OPENAI_API_KEY="your-key"
-# Use in generator: --server https://api.openai.com/v1
-```
-
-### Environment Variables
-
-```bash
-export DD_LLM_SERVER="http://localhost:8000"
-export DD_LLM_MODEL="qwen-72b"
-export DD_TIMEOUT="120"
-```
-
----
-
-## Project Structure
+## Project layout
 
 ```
 difficult_dialogs/
-├── difficult_dialogs/
-│   ├── __init__.py          # Package exports
-│   ├── statements.py         # Statement dataclass
-│   ├── premises.py           # Premise dataclass
-│   ├── arguments.py          # Argument class + loader + diff
-│   ├── policy.py             # All 10 dialog policies + POLICY_REGISTRY
-│   ├── validators.py         # Quality validation
-│   ├── export/
-│   │   ├── __init__.py       # Re-exports full public API
-│   │   ├── json.py           # JSON serialization
-│   │   ├── sqlite.py         # SQLite database
-│   │   └── markdown.py       # Markdown export
-│   ├── cli.py                # Command-line interface
-│   ├── validators.py         # Quality validation
-│   ├── version.py            # Version block
-│   └── llm/
-│       ├── client.py         # HTTP client
-│       └── generator.py      # Argument generator
-├── examples/
-│   ├── sample_arguments/     # 32 pre-made arguments
-│   ├── streamlit_demo.py     # Web interface
-│   └── run_argument.py       # Simple runner
-├── test/
-│   └── test_*.py             # 678 tests
-├── docs/
-│   ├── index.md              # Overview and navigation
-│   ├── argument-format.md    # File format reference
-│   ├── USER_GUIDE.md         # User manual
-│   ├── DEVELOPER_GUIDE.md    # API reference
-│   └── POLICIES.md           # Policy reference
-├── pyproject.toml            # Build config
-└── readme.md                 # This file
+├── statements.py        # Statement dataclass
+├── premises.py          # Premise — Six Ws: what/why/how/when/where/who
+├── arguments.py         # Argument — load/save/diff/merge
+├── builder.py           # ArgumentBuilder / PremiseBuilder fluent API
+├── policy.py            # BasePolicy + 14 concrete policies + registry
+├── library.py           # ArgumentLibrary — keyword search
+├── validators.py        # Quality scoring
+├── server.py            # FastAPI REST server
+├── cli.py               # dd / difficult-dialogs CLI
+├── export/
+│   ├── json.py          # JSON export
+│   ├── sqlite.py        # SQLite export
+│   ├── markdown.py      # Markdown export
+│   └── transcript.py    # Session transcript export
+└── llm/
+    ├── client.py        # OpenAI-compatible HTTP client
+    ├── generator.py     # Argument generation from topic string
+    └── enhancer.py      # Runtime statement rephrasing
 ```
+
+---
+
+## Comparison
+
+| | difficult_dialogs | Raw LLM | Other debate tools |
+|---|---|---|---|
+| Cost per debate | $0 (after generation) | $0.10–0.50 | Varies |
+| Latency | <1 ms | 2–5 s | 1–3 s |
+| Offline | ✅ | ❌ | ❌ |
+| Hallucinations | ❌ none | ✅ possible | ⚠️ sometimes |
+| Auditable content | ✅ plain text | ❌ black box | ⚠️ limited |
+| Git-versionable | ✅ | ❌ | ⚠️ |
+| LLM enhancement | optional | required | n/a |
+
+---
+
+## Documentation
+
+- [docs/index.md](docs/index.md) — Overview and navigation
+- [docs/argument-format.md](docs/argument-format.md) — File format reference
+- [docs/USER_GUIDE.md](docs/USER_GUIDE.md) — End-user manual
+- [docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md) — API reference
+- [docs/POLICIES.md](docs/POLICIES.md) — All 14 policies documented
 
 ---
 
 ## Contributing
 
-### Report Issues
-https://github.com/TigreGotico/difficult_dialogs/issues
+```bash
+git clone https://github.com/TigreGotico/difficult_dialogs
+cd difficult_dialogs
+uv pip install -e ".[dev]"
+uv run pytest test/ -v
+```
 
-### Submit PRs
-1. Fork the repo
-2. Create feature branch
-3. Add tests (`uv run pytest test/ -v`)
-4. Ensure all tests pass
-5. Submit pull request targeting `dev`
-
----
-
-## Roadmap
-
-### Q2 2026
-- ✅ CLI tool
-- ✅ Export formats (JSON, SQLite)
-- ✅ Validation framework
-- ✅ Web demo
-- ✅ 32 sample arguments
-
-### Q3 2026
-- [ ] JavaScript implementation
-- [ ] Mobile app (React Native)
-- [ ] Multi-language support
-- [ ] Counter-argument generator
-
-### Q4 2026
-- [ ] Visual argument editor
-- [ ] Collaborative debates
-- [ ] Argument marketplace
-- [ ] Enterprise features
+PRs target the `dev` branch.
+Issues: https://github.com/TigreGotico/difficult_dialogs/issues
 
 ---
 
 ## License
 
-Apache 2.0 - See [LICENSE](LICENSE) for details.
-
-Free for personal and commercial use. Attribution appreciated but not required.
-
----
-
-## Citation
-
-```bibtex
-@software{difficult_dialogs2026,
-  title = {Difficult Dialogs: Structured Argument Framework},
-  author = {TigreGotico},
-  year = {2026},
-  url = {https://github.com/TigreGotico/difficult_dialogs},
-  version = {0.5.0}
-}
-```
-
----
-
-## Support
-
-- **Documentation:** `docs/USER_GUIDE.md`, `docs/DEVELOPER_GUIDE.md`
-- **Issues:** https://github.com/TigreGotico/difficult_dialogs/issues
-- **Discussions:** https://github.com/TigreGotico/difficult_dialogs/discussions
-
-Happy debating! 💬
+Apache 2.0 — see [LICENSE](LICENSE).
