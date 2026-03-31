@@ -447,5 +447,13 @@ class TestExportCoverageBranches:
         assert output_path.exists()
 
 
+    def test_get_argument_id_raises_on_miss(self, temp_dir: Path) -> None:
+        """_get_argument_id raises KeyError when argument name not found."""
+        db = LibraryDatabase(temp_dir / "test.db")
+        with pytest.raises(KeyError, match="not found"):
+            db._get_argument_id("nonexistent")
+        db.close()
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
