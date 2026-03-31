@@ -304,6 +304,27 @@ def cmd_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_serve(args: argparse.Namespace) -> int:
+    """Start the FastAPI REST server."""
+    try:
+        import uvicorn
+    except ImportError:
+        print("❌ uvicorn is required to run the server.")
+        print("   Install with: pip install difficult-dialogs[server]")
+        return 1
+
+    print(f"🚀 Starting Difficult Dialogs API server on http://{args.host}:{args.port}")
+    print("   Press Ctrl+C to stop.\n")
+
+    uvicorn.run(
+        "difficult_dialogs.server:app",
+        host=args.host,
+        port=args.port,
+        reload=args.reload,
+    )
+    return 0
+
+
 def main() -> int:
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
@@ -443,6 +464,7 @@ def main() -> int:
         choices=[
             "knowitall", "silent", "socratic", "debate", "exploratory",
             "maieutic", "skeptic", "teacher", "debater", "minimalist",
+            "adaptive",
         ],
         help="Dialog policy to use (default: knowitall)"
     )
@@ -461,7 +483,31 @@ def main() -> int:
         help="Path to search (default: ./examples/sample_arguments)"
     )
     list_parser.set_defaults(func=cmd_list)
-    
+
+    # Serve command
+    serve_parser = subparsers.add_parser(
+        "serve",
+        aliases=["server", "api"],
+        help="Start the FastAPI REST server"
+    )
+    serve_parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Host to bind to (default: 127.0.0.1)"
+    )
+    serve_parser.add_argument(
+        "--port",
+        type=int,
+        default=8080,
+        help="Port to listen on (default: 8080)"
+    )
+    serve_parser.add_argument(
+        "--reload",
+        action="store_true",
+        help="Enable auto-reload for development"
+    )
+    serve_parser.set_defaults(func=cmd_serve)
+
     # Parse arguments
     args = parser.parse_args()
     
