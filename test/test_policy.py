@@ -578,6 +578,142 @@ class TestStream:
         assert any(make_arg().conclusion in m for m in messages)
 
 
+class TestBasePolicyDefensivePaths:
+    """Cover defensive null-return and stale-premise paths in BasePolicy helpers."""
+
+    def _make_policy_with_stale_premise(self) -> SilentPolicy:
+        """Build a policy whose current_premise references a non-existent premise."""
+        arg = Argument(name="test", intro="I.", conclusion="C.")
+        p = Premise(name="real")
+        p.add_statement("s1")
+        arg.add_premise(p)
+        policy = SilentPolicy(arg)
+        policy.state.current_premise = "nonexistent"
+        return policy
+
+    def test_get_support_no_current_premise(self) -> None:
+        """_get_support returns None when current_premise is not set."""
+        arg = make_arg()
+        policy = SilentPolicy(arg)
+        # Don't set current_premise
+        assert policy._get_support() is None
+
+    def test_get_support_stale_premise(self) -> None:
+        """_get_support returns None when current_premise no longer exists."""
+        policy = self._make_policy_with_stale_premise()
+        assert policy._get_support() is None
+
+    def test_get_sources_no_current_premise(self) -> None:
+        """_get_sources returns [] when current_premise is not set."""
+        arg = make_arg()
+        policy = SilentPolicy(arg)
+        assert policy._get_sources() == []
+
+    def test_get_sources_stale_premise(self) -> None:
+        """_get_sources returns [] when current_premise no longer exists."""
+        policy = self._make_policy_with_stale_premise()
+        assert policy._get_sources() == []
+
+    def test_check_five_w_stale_premise(self) -> None:
+        """_check_five_w returns None when current_premise no longer exists."""
+        policy = self._make_policy_with_stale_premise()
+        assert policy._check_five_w("what is this") is None
+
+    def test_run_sync_breaks_on_none_response(self) -> None:
+        """run_sync exits cleanly when handle_input returns None."""
+        arg = Argument(name="test", intro="I.", conclusion="C.")
+        policy = SilentPolicy(arg)
+        gen = policy.run_sync()
+        messages = [next(gen)]
+        try:
+            while True:
+                messages.append(gen.send("yes"))
+        except StopIteration:
+            pass
+        assert len(messages) >= 1
+
+
+class TestFiveWDispatchInCorePolicies:
+    """Cover five_w return paths in SocraticPolicy, DebatePolicy, ExploratoryPolicy."""
+
+    def _arg_with_five_w(self) -> Argument:
+        arg = Argument(name="test", intro="Intro text here.", conclusion="Conclusion.")
+        p = Premise(name="p1")
+        p.add_statement("s1")
+        p.add_what("What this means.")
+        p.add_why("Why this is true.")
+        arg.add_premise(p)
+        return arg
+
+    def test_socratic_five_w_dispatch(self) -> None:
+        """SocraticPolicy returns 5W answer when current_premise is active."""
+        arg = self._arg_with_five_w()
+        policy = SocraticPolicy(arg)
+        policy.start()
+        policy.state.current_premise = "p1"
+        response = policy.handle_input("what does this mean")
+        assert response == "What this means."
+
+    def test_debate_five_w_dispatch(self) -> None:
+        """DebatePolicy returns 5W answer when current_premise is active."""
+        arg = self._arg_with_five_w()
+        policy = DebatePolicy(arg)
+        policy.start()
+        policy.state.current_premise = "p1"
+        response = policy.handle_input("why is that")
+        assert response == "Why this is true."
+
+    def test_exploratory_five_w_dispatch(self) -> None:
+        """ExploratoryPolicy returns 5W answer when current_premise is active."""
+        arg = self._arg_with_five_w()
+        policy = ExploratoryPolicy(arg)
+        policy.start()
+        policy.state.current_premise = "p1"
+        response = policy.handle_input("what does this mean")
+        assert response == "What this means."
+
+    def test_debate_neutral_advance(self) -> None:
+        """DebatePolicy neutral input (not agree/disagree) calls agree + advance."""
+        arg = self._arg_with_five_w()
+        policy = DebatePolicy(arg)
+        policy.start()
+        # "maybe" doesn't start with y/n/disagree/agree
+        response = policy.handle_input("maybe")
+        assert response is not None
+
+    def test_exploratory_neutral_advance(self) -> None:
+        """ExploratoryPolicy neutral input calls agree + advance."""
+        arg = self._arg_with_five_w()
+        policy = ExploratoryPolicy(arg)
+        policy.start()
+        response = policy.handle_input("perhaps")
+        assert response is not None
+
+    def test_knowitall_five_w_dispatch(self) -> None:
+        """KnowItAllPolicy returns 5W answer when current_premise is active."""
+        arg = self._arg_with_five_w()
+        policy = KnowItAllPolicy(arg)
+        policy.start()
+        policy.state.current_premise = "p1"
+        response = policy.handle_input("what does this mean")
+        assert response == "What this means."
+
+    def test_knowitall_sources_path(self) -> None:
+        """KnowItAllPolicy on disagreement falls through to sources when no support."""
+        arg = Argument(name="test", intro="Intro.", conclusion="Conclusion.")
+        p = Premise(name="p1")
+        p.add_statement("s1")
+        p.add_source("https://example.com")
+        arg.add_premise(p)
+        policy = KnowItAllPolicy(arg)
+        policy.start()
+        policy.state.current_premise = "p1"
+        # Disagree with no support available
+        response = policy.handle_input("no")
+        assert response is not None
+        assert "example.com" in response or "Sources" in response
+
+
 def test_all_policies_handle_disagreement() -> None:
     """All policy types handle disagreement appropriately."""
     arg = make_arg()
