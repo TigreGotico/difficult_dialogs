@@ -134,6 +134,42 @@ class PremiseBuilder:
         self._premise.on_disagree = premise_name
         return self
 
+    def branch(
+        self,
+        on_agree: str | None = None,
+        on_disagree: str | None = None,
+    ) -> "PremiseBuilder":
+        """Set both branching edges in one call.
+
+        Shorthand for chaining :meth:`on_agree` and :meth:`on_disagree`.
+
+        Args:
+            on_agree: Name of the premise to visit when the user agrees.
+                ``None`` leaves the agree edge unchanged.
+            on_disagree: Name of the premise to visit when the user disagrees.
+                ``None`` leaves the disagree edge unchanged.
+
+        Returns:
+            Self for method chaining.
+
+        Example::
+
+            arg = (
+                ArgumentBuilder("example")
+                .premise("intro")
+                    .statement("Do you agree?")
+                    .branch(on_agree="deep_dive", on_disagree="basics")
+                    .done()
+                ...
+                .build()
+            )
+        """
+        if on_agree is not None:
+            self._premise.on_agree = on_agree
+        if on_disagree is not None:
+            self._premise.on_disagree = on_disagree
+        return self
+
     # ------------------------------------------------------------------ #
     # navigation
     # ------------------------------------------------------------------ #

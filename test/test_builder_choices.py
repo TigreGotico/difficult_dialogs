@@ -83,6 +83,56 @@ class TestPremiseBuilderBranching:
         assert arg.next_premise("p1", "disagree") == "p_no"
 
 
+class TestPremiseBuilderBranch:
+    def test_branch_sets_both_edges(self) -> None:
+        arg = (
+            ArgumentBuilder("t")
+            .premise("p1")
+                .statement("claim")
+                .branch(on_agree="p_yes", on_disagree="p_no")
+                .done()
+            .premise("p_yes").statement("yes").done()
+            .premise("p_no").statement("no").done()
+            .build()
+        )
+        p1 = arg.get_premise("p1")
+        assert p1 is not None
+        assert p1.on_agree == "p_yes"
+        assert p1.on_disagree == "p_no"
+        assert arg.next_premise("p1", "agree") == "p_yes"
+        assert arg.next_premise("p1", "disagree") == "p_no"
+
+    def test_branch_partial_agree_only(self) -> None:
+        arg = (
+            ArgumentBuilder("t")
+            .premise("p1")
+                .statement("claim")
+                .branch(on_agree="p_yes")
+                .done()
+            .premise("p_yes").statement("yes").done()
+            .build()
+        )
+        p1 = arg.get_premise("p1")
+        assert p1 is not None
+        assert p1.on_agree == "p_yes"
+        assert p1.on_disagree is None
+
+    def test_branch_partial_disagree_only(self) -> None:
+        arg = (
+            ArgumentBuilder("t")
+            .premise("p1")
+                .statement("claim")
+                .branch(on_disagree="p_no")
+                .done()
+            .premise("p_no").statement("no").done()
+            .build()
+        )
+        p1 = arg.get_premise("p1")
+        assert p1 is not None
+        assert p1.on_agree is None
+        assert p1.on_disagree == "p_no"
+
+
 class TestArgumentBuilderEntryPoint:
     def test_entry_point_stored(self) -> None:
         arg = (
