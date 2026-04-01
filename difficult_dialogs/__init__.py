@@ -36,7 +36,15 @@ from difficult_dialogs.policy import (
     get_policy,
 )
 
-from difficult_dialogs.choices import ChoiceOption, ChoiceSolverProtocol, parse_choice, parse_choices_file
+from difficult_dialogs.choices import (
+    ChoiceOption,
+    ChoiceSolverProtocol,
+    parse_choice,
+    parse_choices_file,
+    set_solver as set_choice_solver,
+    configure as configure_choice_solver,
+    list_solvers as list_choice_solvers,
+)
 from difficult_dialogs.yesno import parse_yes_no, is_agreement, is_disagreement, set_solver, configure, list_solvers
 from difficult_dialogs.library import ArgumentLibrary, SearchResult
 from difficult_dialogs.builder import ArgumentBuilder, PremiseBuilder
@@ -88,6 +96,9 @@ __all__ = [
     "ChoiceSolverProtocol",
     "parse_choice",
     "parse_choices_file",
+    "set_choice_solver",
+    "configure_choice_solver",
+    "list_choice_solvers",
     # Yes/no parsing
     "parse_yes_no",
     "is_agreement",

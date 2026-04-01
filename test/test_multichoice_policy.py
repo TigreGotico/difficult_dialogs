@@ -98,8 +98,11 @@ class TestMultiChoicePolicyHandleInput:
         assert "Great progress." in response
 
     def test_invalid_choice_re_presents(self) -> None:
+        """When the solver returns None, the bot re-presents the choices."""
+        from difficult_dialogs.choices import _DefaultChoiceSolver
         arg = _make_arg_with_choices()
-        policy = MultiChoicePolicy(arg)
+        # Use offline solver so "zzz" returns None (triggering re-prompt)
+        policy = MultiChoicePolicy(arg, choice_solver=_DefaultChoiceSolver())
         policy.start()
         response = policy.handle_input("zzz")
         assert response is not None

@@ -96,7 +96,8 @@ class TestDefaultChoiceSolver:
 # ---------------------------------------------------------------------------
 
 class TestParseChoice:
-    def test_default_solver(self, options: list[ChoiceOption]) -> None:
+    def test_default_solver_label(self, options: list[ChoiceOption]) -> None:
+        """Label-based queries always use offline matcher first — even with OPM active."""
         result = parse_choice("A", options, "en-US")
         assert result is options[0]
 
@@ -108,8 +109,11 @@ class TestParseChoice:
         result = parse_choice("anything", options, "en-US", solver=AlwaysFirst())
         assert result is options[0]
 
-    def test_returns_none_on_no_match(self, options: list[ChoiceOption]) -> None:
-        assert parse_choice("zzz", options, "en-US") is None
+    def test_offline_solver_returns_none_on_no_match(self, options: list[ChoiceOption]) -> None:
+        """The offline _DefaultChoiceSolver returns None for unrecognised input."""
+        from difficult_dialogs.choices import _DefaultChoiceSolver
+        solver = _DefaultChoiceSolver()
+        assert solver.match_choice("zzz", options, "en-US") is None
 
 
 # ---------------------------------------------------------------------------

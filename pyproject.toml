@@ -56,12 +56,16 @@ server = [
     "fastapi>=0.100.0",
     "uvicorn[standard]>=0.23.0",
 ]
+choice = [
+    "ovos-solver-bm25-plugin",
+]
 all = [
     "tqdm>=4.65.0",
     "streamlit>=1.28.0",
     "fastapi>=0.100.0",
     "uvicorn[standard]>=0.23.0",
     "watchdog>=3.0.0",
+    "ovos-solver-bm25-plugin",
 ]
 
 [project.scripts]
