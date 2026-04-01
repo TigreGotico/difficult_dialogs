@@ -960,3 +960,24 @@ def test_lang_passed_to_parse_yes_no(monkeypatch) -> None:
     policy.start()
     policy.respond("oui")
     assert "fr-FR" in captured
+
+
+# ---------------------------------------------------------------------------
+# Plugin registry / get_policy kwargs
+# ---------------------------------------------------------------------------
+
+def test_get_policy_accepts_lang_kwarg() -> None:
+    """get_policy forwards kwargs to the policy constructor."""
+    from difficult_dialogs.policy import get_policy
+    policy = get_policy("knowitall", make_arg(), lang="de-DE")
+    assert policy.lang == "de-DE"
+
+
+def test_policy_registry_contains_builtins() -> None:
+    """POLICY_REGISTRY contains all expected built-in policy names."""
+    from difficult_dialogs.policy import POLICY_REGISTRY
+    expected = {
+        "knowitall", "silent", "socratic", "debate", "exploratory",
+        "maieutic", "skeptic", "teacher", "debater", "minimalist", "adaptive",
+    }
+    assert expected <= set(POLICY_REGISTRY.keys())

@@ -1518,13 +1518,41 @@ POLICY_REGISTRY: dict[str, type[BasePolicy]] = {
     # WebhookPolicy intentionally excluded — requires webhook_url constructor arg
 }
 
+# Load third-party policies from the ``difficult_dialogs.policies`` entry-point
+# group.  This runs once at import time so all callers share the same registry.
+def _load_plugin_policies() -> None:
+    """Discover and register ``difficult_dialogs.policies`` entry-point plugins."""
+    import importlib.metadata
+    try:
+        eps = importlib.metadata.entry_points(group="difficult_dialogs.policies")
+    except Exception:
+        return
+    for ep in eps:
+        try:
+            cls = ep.load()
+            if isinstance(cls, type) and issubclass(cls, BasePolicy):
+                POLICY_REGISTRY[ep.name.lower()] = cls
+        except Exception as exc:  # pragma: no cover
+            import logging
+            logging.getLogger(__name__).warning(
+                "difficult_dialogs: failed to load policy plugin %r: %s", ep.name, exc
+            )
 
-def get_policy(name: str, argument: Argument) -> BasePolicy:
-    """Get a policy instance by name.
+_load_plugin_policies()
+
+
+def get_policy(name: str, argument: Argument, **kwargs: object) -> BasePolicy:
+    """Get a policy instance by name, including any installed plugins.
+
+    Third-party policies registered under the ``difficult_dialogs.policies``
+    entry-point group are discovered automatically at import time and included
+    in the registry alongside the built-in policies.
 
     Args:
         name: Policy name (case-insensitive).
         argument: Argument to apply the policy to.
+        **kwargs: Extra keyword arguments forwarded to the policy constructor
+            (e.g. ``lang="es-ES"``).
 
     Returns:
         Policy instance.
@@ -1536,4 +1564,4 @@ def get_policy(name: str, argument: Argument) -> BasePolicy:
     if name_lower not in POLICY_REGISTRY:
         available = ", ".join(POLICY_REGISTRY.keys())
         raise InvalidPolicyError(f"Unknown policy: {name_lower!r}. Available: {available}")
-    return POLICY_REGISTRY[name_lower](argument)
+    return POLICY_REGISTRY[name_lower](argument, **kwargs)

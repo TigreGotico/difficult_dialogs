@@ -68,6 +68,15 @@ all = [
 difficult-dialogs = "difficult_dialogs.cli:main"
 did = "difficult_dialogs.cli:main"
 
+# Third-party policy plugins register here.
+# Example in a plugin package's pyproject.toml:
+#
+#   [project.entry-points."difficult_dialogs.policies"]
+#   my_policy = "my_package.policies:MyPolicy"
+#
+# The policy class must subclass difficult_dialogs.policy.BasePolicy.
+[project.entry-points."difficult_dialogs.policies"]
+
 [project.urls]
 Homepage = "https://github.com/JarbasAl/difficult_dialogs"
 Documentation = "https://github.com/JarbasAl/difficult_dialogs#readme"
