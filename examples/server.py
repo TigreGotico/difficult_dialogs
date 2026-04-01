@@ -1,17 +1,20 @@
-"""FastAPI REST server for difficult-dialogs.
+"""Example: FastAPI REST server built on top of difficult-dialogs.
 
-Exposes structured debate sessions over HTTP so any frontend or service can
-drive conversations without embedding Python.
+This is a **demo application** — not part of the library.  Copy and adapt it
+as a starting point for your own HTTP or WebSocket front-end.
 
-Install extras::
+difficult-dialogs is a Python library; this file shows one way to expose it
+over HTTP using FastAPI.
 
-    pip install difficult-dialogs[server]
+Dependencies (not installed by default)::
+
+    pip install fastapi uvicorn
 
 Run::
 
-    uvicorn difficult_dialogs.server:app --reload
-    # or
-    dd serve --host 0.0.0.0 --port 8080 --args-dir examples/sample_arguments
+    uvicorn examples.server:app --reload
+    # or, from the repo root:
+    python examples/server.py
 
 Endpoints
 ---------
@@ -306,3 +309,9 @@ def list_arguments(args_dir: str = "examples/sample_arguments") -> Any:
             result[category_dir.name] = names
 
     return result
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=8080)
+

@@ -1,12 +1,22 @@
-"""Tests for difficult_dialogs.server FastAPI REST API."""
+"""Tests for the example FastAPI REST server (examples/server.py)."""
+import sys
 import pytest
 from pathlib import Path
 
 pytest.importorskip("fastapi", reason="fastapi not installed — skipping server tests")
 pytest.importorskip("httpx", reason="httpx not installed — skipping server tests")
 
+import importlib.util  # noqa: E402
+
+_server_path = Path(__file__).parent.parent / "examples" / "server.py"
+_spec = importlib.util.spec_from_file_location("_dd_server_test", _server_path)
+_mod = importlib.util.module_from_spec(_spec)  # type: ignore[arg-type]
+_spec.loader.exec_module(_mod)  # type: ignore[union-attr]
+
 from fastapi.testclient import TestClient  # noqa: E402
-from difficult_dialogs.server import app, _sessions  # noqa: E402
+
+app = _mod.app
+_sessions = _mod._sessions
 
 COGITO_DIR = str(Path(__file__).parent.parent / "examples" / "i_think_therefore_i_am")
 

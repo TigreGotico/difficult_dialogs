@@ -310,23 +310,35 @@ def cmd_list(args: argparse.Namespace) -> int:
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
-    """Start the FastAPI REST server."""
+    """Start the example FastAPI REST server (examples/server.py)."""
     try:
         import uvicorn
     except ImportError:
         print("❌ uvicorn is required to run the server.")
-        print("   Install with: pip install difficult-dialogs[server]")
+        print("   Install with: pip install fastapi uvicorn")
         return 1
+
+    import importlib.util, sys
+    from pathlib import Path
+
+    # Locate examples/server.py relative to this file or cwd
+    candidates = [
+        Path(__file__).parent.parent / "examples" / "server.py",
+        Path("examples") / "server.py",
+    ]
+    server_path = next((p for p in candidates if p.exists()), None)
+    if server_path is None:
+        print("❌ examples/server.py not found. Run from the repo root or install the package.")
+        return 1
+
+    spec = importlib.util.spec_from_file_location("_dd_server", server_path)
+    module = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+    spec.loader.exec_module(module)  # type: ignore[union-attr]
 
     print(f"🚀 Starting Difficult Dialogs API server on http://{args.host}:{args.port}")
     print("   Press Ctrl+C to stop.\n")
 
-    uvicorn.run(
-        "difficult_dialogs.server:app",
-        host=args.host,
-        port=args.port,
-        reload=args.reload,
-    )
+    uvicorn.run(module.app, host=args.host, port=args.port, reload=False)
     return 0
 
 
