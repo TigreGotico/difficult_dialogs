@@ -84,6 +84,57 @@ class PremiseBuilder:
         return self
 
     # ------------------------------------------------------------------ #
+    # branching
+    # ------------------------------------------------------------------ #
+
+    def choice(
+        self,
+        text: str,
+        outcome: str = "agree",
+        next_premise: str | None = None,
+        label: str | None = None,
+    ) -> "PremiseBuilder":
+        """Add a multiple-choice option to this premise.
+
+        Args:
+            text: Human-readable option text.
+            outcome: Semantic outcome — ``"agree"``, ``"disagree"``,
+                ``"clarify"``, or ``"skip"``.
+            next_premise: Optional name of the premise to jump to when
+                this option is selected.
+            label: Short label (``"A"``, ``"B"``…). Auto-assigned if omitted.
+
+        Returns:
+            Self for method chaining.
+        """
+        self._premise.add_choice(text=text, outcome=outcome, next_premise=next_premise, label=label)
+        return self
+
+    def on_agree(self, premise_name: str) -> "PremiseBuilder":
+        """Set the premise to jump to when the user agrees.
+
+        Args:
+            premise_name: Name of the target premise.
+
+        Returns:
+            Self for method chaining.
+        """
+        self._premise.on_agree = premise_name
+        return self
+
+    def on_disagree(self, premise_name: str) -> "PremiseBuilder":
+        """Set the premise to jump to when the user disagrees.
+
+        Args:
+            premise_name: Name of the target premise.
+
+        Returns:
+            Self for method chaining.
+        """
+        self._premise.on_disagree = premise_name
+        return self
+
+    # ------------------------------------------------------------------ #
     # navigation
     # ------------------------------------------------------------------ #
 
@@ -135,6 +186,21 @@ class ArgumentBuilder:
     def conclusion(self, text: str) -> "ArgumentBuilder":
         """Set the closing statement."""
         self._argument.conclusion = text
+        return self
+
+    def entry_point(self, premise_name: str) -> "ArgumentBuilder":
+        """Set the name of the first premise to present.
+
+        Useful for non-linear arguments where the starting node is not the
+        first one added via :meth:`premise`.
+
+        Args:
+            premise_name: Name of the entry-point premise.
+
+        Returns:
+            Self for method chaining.
+        """
+        self._argument.entry_point = premise_name
         return self
 
     # ------------------------------------------------------------------ #
