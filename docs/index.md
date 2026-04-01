@@ -18,7 +18,16 @@ Zero external runtime dependencies. Pure Python 3.10+.
 
 10 concrete policies ship in `policy.py`: `KnowItAllPolicy`, `SilentPolicy`, `SocraticPolicy`,
 `DebatePolicy`, `ExploratoryPolicy`, `MaieuticPolicy`, `SkepticPolicy`, `TeacherPolicy`,
-`DebaterPolicy`, `MinimalistPolicy`.
+`DebaterPolicy`, `MinimalistPolicy`, `AdaptivePolicy`, `MultiChoicePolicy`.
+
+`AdaptivePolicy` — switches from an initial policy to a fallback after N consecutive disagreements.
+`MultiChoicePolicy` — presents labelled A/B/C menus when a premise has a `.choices` file.
+
+`ArgumentBuilder` / `PremiseBuilder` — `builder.py` — fluent Python API for constructing
+arguments programmatically without touching the file format.
+
+`ChoiceSolverProtocol` — `choices.py` — pluggable matcher for multiple-choice input; defaults
+to offline label/prefix matching, upgrades to BM25 if `ovos-solver-bm25-plugin` is installed.
 
 ## File format
 
@@ -73,7 +82,10 @@ diff = arg.diff(updated_arg)           # {meta, added_premises, removed_premises
 
 ## Navigation
 
-- [argument-format.md](argument-format.md) — full file format reference
+- [argument-format.md](argument-format.md) — full file format reference (`.premise`, `.choices`, `.on_agree`, `.translations.json`, …)
+- [POLICIES.md](POLICIES.md) — policy reference (all 10 built-in policies + custom policies)
+- [builder.md](builder.md) — Python API: `ArgumentBuilder`, `Argument.from_directory()`, `validate_argument()`
+- [choice-solver.md](choice-solver.md) — OPM choice solver, offline matcher, `set_solver()`
+- [cli.md](cli.md) — CLI reference (`dd debate`, `dd diff`, `dd replay`, `dd solvers`, …)
 - [USER_GUIDE.md](USER_GUIDE.md) — end-user manual
-- [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md) — API reference
-- [POLICIES.md](POLICIES.md) — policy reference
+- [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md) — developer and integration guide

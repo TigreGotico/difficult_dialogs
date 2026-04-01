@@ -20,8 +20,9 @@ argument_name/
     ├── premise_name.where     # Optional. Answer to "where?"
     ├── premise_name.who       # Optional. Answer to "who?" (who is affected / who are the authorities)
     ├── premise_name.choices   # Optional. Multiple-choice options (see below).
-    ├── premise_name.on_agree  # Optional. Name of the premise to jump to on agreement.
-    └── premise_name.on_disagree  # Optional. Name of the premise to jump to on disagreement.
+    ├── premise_name.on_agree         # Optional. Name of the premise to jump to on agreement.
+    ├── premise_name.on_disagree      # Optional. Name of the premise to jump to on disagreement.
+    └── premise_name.translations.json  # Optional. Bulk i18n translations for all fields.
 ```
 
 The subdirectory name is the premise identifier. All files inside must share
@@ -94,8 +95,18 @@ C) I disagree [disagree]
 D) I need more context [clarify]
 ```
 
-Loaded via `Premise.apply_file()` → `parse_choices_file()` — `choices.py`.
-Stored in `Premise.choices: list[ChoiceOption]` — `premises.py`.
+Loaded via `Premise.apply_file()` → `parse_choices_file()` — `choices.py:392`.
+Stored in `Premise.choices: list[ChoiceOption]` — `premises.py:46`.
+
+Default outcomes when no `[outcome]` keyword is present, by positional label:
+
+| Label | Default outcome |
+|---|---|
+| A | agree |
+| B | agree |
+| C | disagree |
+| D | clarify |
+| E | skip |
 
 ### `.on_agree` / `.on_disagree` — Branching edges
 
@@ -113,7 +124,55 @@ scientific_consensus_explained
 
 Together, `.on_agree`, `.on_disagree`, and `.choices` turn a flat argument into a
 **directed graph** (dialogue tree). The traversal is implemented in
-`Argument.next_premise()` — `arguments.py`.
+`Argument.next_premise()` — `arguments.py:113`.
+
+Resolution order inside `next_premise()`:
+1. Explicit `on_agree` / `on_disagree` file for the current premise.
+2. `ChoiceOption.next_premise` for the selected option outcome.
+3. Linear insertion-order fallback (backwards-compatible default).
+
+### `.translations.json` — bulk i18n translations
+
+A file named `<stem>.translations.json` inside a premise directory stores
+translated strings for all fields and languages in one file.
+
+```json
+{
+  "es-ES": {
+    "statements": ["El cambio climático es causado por la actividad humana."],
+    "why":        ["Porque el CO₂ atrapa el calor en la atmósfera."]
+  },
+  "pt-BR": {
+    "statements": ["A mudança climática é causada pela atividade humana."]
+  }
+}
+```
+
+Keys are BCP-47 language codes. Field names match the file extensions without
+the dot (`statements`, `support`, `source`, `what`, `why`, `how`, `when`,
+`where`, `who`).
+
+Loaded via `Premise.apply_file()` — `premises.py:166`. Stored in
+`Premise.translations: dict[str, dict[str, list[str]]]` — `premises.py:45`.
+
+Retrieve translated statements with `Premise.get_statements(lang="es-ES")` —
+`premises.py:265`.
+
+Locale-specific flat files (`<stem>.es-ES.premise`) are also supported and
+follow the same storage path.
+
+### `entry_point` — non-linear start node
+
+To start the dialog at a premise other than the first one in insertion order,
+set `entry_point` in the argument. This is a Python-only field (not a file);
+set it via the builder or in Python before calling `policy.start()`.
+
+```python
+arg.entry_point = "economic_impacts"
+```
+
+`BasePolicy.start()` reads `argument.entry_point` and sets
+`state.current_premise` accordingly — `policy.py:130`.
 
 ## Example — `i_think_therefore_i_am/`
 
