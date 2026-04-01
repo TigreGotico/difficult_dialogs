@@ -30,11 +30,13 @@ from difficult_dialogs.policy import (
     WebhookPolicy,
     LLMEnhancedPolicy,
     MultiArgumentPolicy,
+    MultiChoicePolicy,
     PolicyState,
     POLICY_REGISTRY,
     get_policy,
 )
 
+from difficult_dialogs.choices import ChoiceOption, ChoiceSolverProtocol, parse_choice, parse_choices_file
 from difficult_dialogs.yesno import parse_yes_no, is_agreement, is_disagreement, set_solver, configure, list_solvers
 from difficult_dialogs.library import ArgumentLibrary, SearchResult
 from difficult_dialogs.builder import ArgumentBuilder, PremiseBuilder
@@ -80,6 +82,12 @@ __all__ = [
     "WebhookPolicy",
     "LLMEnhancedPolicy",
     "MultiArgumentPolicy",
+    "MultiChoicePolicy",
+    # Choices
+    "ChoiceOption",
+    "ChoiceSolverProtocol",
+    "parse_choice",
+    "parse_choices_file",
     # Yes/no parsing
     "parse_yes_no",
     "is_agreement",
