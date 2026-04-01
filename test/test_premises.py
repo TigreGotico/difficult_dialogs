@@ -268,3 +268,77 @@ def test_check_five_w_who(sample_arg: Argument) -> None:
     policy.state.current_premise = premise.name
     response = policy.handle_input("who is affected by this")
     assert response == "All citizens"
+
+
+# ---------------------------------------------------------------------------
+# Premise.translations — i18n field
+# ---------------------------------------------------------------------------
+
+class TestPremiseTranslations:
+    """Tests for Premise.translations and related helpers."""
+
+    def _make_premise(self) -> "Premise":
+        from difficult_dialogs.premises import Premise
+        p = Premise(name="test")
+        p.add_statement("Computers process information.")
+        p.add_translation("es-ES", "statements", "Los ordenadores procesan información.")
+        return p
+
+    def test_add_translation_stored(self) -> None:
+        p = self._make_premise()
+        assert "es-ES" in p.translations
+        assert "statements" in p.translations["es-ES"]
+        assert "Los ordenadores procesan información." in p.translations["es-ES"]["statements"]
+
+    def test_get_statements_default_lang(self) -> None:
+        p = self._make_premise()
+        stmts = p.get_statements()
+        assert "Computers process information." in stmts
+
+    def test_get_statements_translated(self) -> None:
+        p = self._make_premise()
+        stmts = p.get_statements(lang="es-ES")
+        assert "Los ordenadores procesan información." in stmts
+
+    def test_get_statements_falls_back_when_no_translation(self) -> None:
+        p = self._make_premise()
+        stmts = p.get_statements(lang="fr-FR")
+        assert "Computers process information." in stmts
+
+    def test_to_dict_includes_translations(self) -> None:
+        p = self._make_premise()
+        d = p.to_dict()
+        assert "translations" in d
+        assert "es-ES" in d["translations"]
+
+    def test_from_dict_round_trip(self) -> None:
+        from difficult_dialogs.premises import Premise
+        p = self._make_premise()
+        p2 = Premise.from_dict(p.to_dict())
+        assert p2.translations == p.translations
+
+    def test_to_dict_omits_translations_when_empty(self) -> None:
+        from difficult_dialogs.premises import Premise
+        p = Premise(name="plain")
+        p.add_statement("Statement.")
+        assert "translations" not in p.to_dict()
+
+    def test_apply_file_locale_specific(self, tmp_path) -> None:
+        """apply_file detects locale-specific filename pattern."""
+        from difficult_dialogs.premises import Premise
+        f = tmp_path / "my_premise.es-ES.premise"
+        f.write_text("Una afirmación en español.")
+        p = Premise(name="my_premise")
+        p.apply_file(f)
+        assert "es-ES" in p.translations
+        assert "Una afirmación en español." in p.translations["es-ES"]["premise"]
+
+    def test_apply_file_normal_not_affected(self, tmp_path) -> None:
+        """Normal .premise files are not treated as locale-specific."""
+        from difficult_dialogs.premises import Premise
+        f = tmp_path / "my_premise.premise"
+        f.write_text("Normal statement.")
+        p = Premise(name="my_premise")
+        p.apply_file(f)
+        assert len(p.statements) == 1
+        assert not p.translations

@@ -41,6 +41,7 @@ class Premise:
     when: list[str] = field(default_factory=list)
     where: list[str] = field(default_factory=list)
     who: list[str] = field(default_factory=list)
+    translations: dict[str, dict[str, list[str]]] = field(default_factory=dict)
     
     def __post_init__(self) -> None:
         """Set description from name if not provided."""
@@ -156,10 +157,55 @@ class Premise:
             ".where":   self.add_where,
             ".who":     self.add_who,
         }
+        # Check for locale-specific file: name.es-ES.premise → lang="es-ES", field="premise"
+        # Filename pattern: <stem>.<lang-code>.<field>  where lang contains a hyphen
+        parts = file.name.split(".")
+        if len(parts) >= 3 and "-" in parts[-2]:
+            lang_code = parts[-2]
+            field_ext = "." + parts[-1]
+            if field_ext in _DISPATCH:
+                field_name = parts[-1]
+                for line in lines:
+                    self.add_translation(lang_code, field_name, line)
+                return
+
         adder = _DISPATCH.get(file.suffix)
         if adder is not None:
             for line in lines:
                 adder(line)
+
+    def add_translation(self, lang: str, field: str, text: str) -> Premise:
+        """Add a translated string for a specific field and language.
+
+        Translations are keyed by BCP-47 language code (e.g. ``"es-ES"``) and
+        field name (``"statements"``, ``"support"``, ``"what"``, …).
+
+        Args:
+            lang: BCP-47 language code.
+            field: Target field name (e.g. ``"statements"``, ``"why"``).
+            text: Translated text to store.
+
+        Returns:
+            Self for method chaining.
+        """
+        self.translations.setdefault(lang, {}).setdefault(field, []).append(text)
+        return self
+
+    def get_statements(self, lang: str | None = None) -> list[str]:
+        """Return statement texts, preferring *lang* translations when available.
+
+        Args:
+            lang: BCP-47 language code.  Falls back to the default (English)
+                  statements when no translation exists for *lang*.
+
+        Returns:
+            List of statement text strings.
+        """
+        if lang and lang in self.translations:
+            translated = self.translations[lang].get("statements")
+            if translated:
+                return list(translated)
+        return [s.text for s in self.statements]
 
     def get_next_statement(self, cache: set[str]) -> Statement | None:
         """Get the next unspoken statement.
@@ -191,7 +237,7 @@ class Premise:
     
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary representation."""
-        return {
+        d: dict[str, Any] = {
             "name": self.name,
             "description": self.description,
             "statements": [s.text for s in self.statements],
@@ -205,6 +251,12 @@ class Premise:
             "who": self.who.copy(),
             "is_true": self.is_true,
         }
+        if self.translations:
+            d["translations"] = {
+                lang: {field: list(texts) for field, texts in fields.items()}
+                for lang, fields in self.translations.items()
+            }
+        return d
     
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Premise:
@@ -247,6 +299,11 @@ class Premise:
 
         for text in data.get("who", []):
             premise.add_who(text)
+
+        for lang, fields in data.get("translations", {}).items():
+            for field_name, texts in fields.items():
+                for text in texts:
+                    premise.add_translation(lang, field_name, text)
 
         return premise
     
