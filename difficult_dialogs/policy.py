@@ -13,6 +13,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, AsyncGenerator, Generator
 
+from difficult_dialogs.choices import ChoiceOption, ChoiceSolverProtocol, parse_choice
 from difficult_dialogs.exceptions import InvalidPolicyError
 from difficult_dialogs.yesno import is_agreement, is_disagreement, parse_yes_no
 
@@ -195,7 +196,21 @@ class BasePolicy(ABC):
                     self.state.spoken_statements.add(stmt.text)
                     return (self.state.current_premise, stmt.text)
         
-        # Move to next premise
+        # Move to next premise via graph traversal if possible, else linear
+        outcome = "agree" if self.state.user_agrees else "disagree"
+        if self.state.current_premise:
+            next_name = self.argument.next_premise(self.state.current_premise, outcome)
+            if next_name and next_name not in self.state.spoken_premises:
+                premise = self.argument.get_premise(next_name)
+                if premise and premise.is_complete:
+                    self.state.current_premise = premise.name
+                    self.state.spoken_premises.add(premise.name)
+                    stmt = premise.get_next_statement(self.state.spoken_statements)
+                    if stmt:
+                        self.state.spoken_statements.add(stmt.text)
+                        return (premise.name, stmt.text)
+
+        # Fallback: first unspoken premise in insertion order
         premise = self.argument.get_next_premise(self.state.spoken_premises)
         if premise:
             self.state.current_premise = premise.name
@@ -204,7 +219,7 @@ class BasePolicy(ABC):
             if stmt:
                 self.state.spoken_statements.add(stmt.text)
                 return (premise.name, stmt.text)
-        
+
         # No more statements
         return None
 
@@ -1502,6 +1517,195 @@ class MultiArgumentPolicy(BasePolicy):
         return self._inner.end()
 
 
+class MultiChoicePolicy(BasePolicy):
+    """Present labelled choices (A/B/C…) to the user each turn.
+
+    When the current premise has a ``.choices`` file, the bot appends the
+    options to its statement and routes to the next premise using the
+    selected ``ChoiceOption.next_premise`` or ``on_agree``/``on_disagree``
+    graph edges.  If the premise has no choices defined the policy falls
+    back to standard yes/no behaviour (identical to :class:`KnowItAllPolicy`).
+
+    Attributes:
+        choice_solver: Optional pluggable solver; defaults to the offline
+            label/prefix matcher in :mod:`difficult_dialogs.choices`.
+    """
+
+    def __init__(
+        self,
+        argument: Argument,
+        lang: str = "en-US",
+        choice_solver: ChoiceSolverProtocol | None = None,
+    ) -> None:
+        """Initialise MultiChoicePolicy.
+
+        Args:
+            argument: Argument to present.
+            lang: BCP-47 language code.
+            choice_solver: Optional custom choice-matching solver.
+        """
+        super().__init__(argument, lang)
+        self._choice_solver = choice_solver
+        self._pending_choices: list[ChoiceOption] = []
+
+    def _format_choices(self, choices: list[ChoiceOption]) -> str:
+        """Return a formatted choice menu string.
+
+        Args:
+            choices: The options to format.
+
+        Returns:
+            A multi-line string suitable for appending to a bot statement.
+        """
+        lines = [f"  {opt.label}) {opt.text}" for opt in choices]
+        return "\n" + "\n".join(lines)
+
+    def handle_input(self, user_input: str) -> str | None:
+        """Process user input against pending choices or fall back to yes/no.
+
+        If choices are pending (set during the previous turn), attempt to
+        match *user_input* to one.  On a match, resolve the outcome and
+        advance via the choice's ``next_premise`` or the standard graph
+        edges.  On no match, re-present the choices.
+
+        If no choices are pending, behave like :class:`KnowItAllPolicy`.
+
+        Args:
+            user_input: Raw text from the user.
+
+        Returns:
+            Next bot response, or ``None`` when the dialog is complete.
+        """
+        lower = user_input.lower().strip()
+
+        # --- Resolve a pending choice selection ---
+        if self._pending_choices:
+            chosen = parse_choice(lower, self._pending_choices, self.lang, self._choice_solver)
+            if chosen is None:
+                # Re-present choices
+                return (
+                    "Please choose one of the options:"
+                    + self._format_choices(self._pending_choices)
+                )
+            self._pending_choices = []
+            outcome = chosen.outcome
+
+            # Jump to an explicit next_premise if the choice carries one
+            if chosen.next_premise and chosen.next_premise in self.argument._premises:
+                premise = self.argument.get_premise(chosen.next_premise)
+                if premise:
+                    self.state.current_premise = premise.name
+                    self.state.spoken_premises.add(premise.name)
+                    stmt = premise.get_next_statement(self.state.spoken_statements)
+                    if stmt:
+                        self.state.spoken_statements.add(stmt.text)
+                        response = stmt.text
+                        if premise.choices:
+                            self._pending_choices = list(premise.choices)
+                            response += self._format_choices(self._pending_choices)
+                        return response
+                    return self.end()
+
+            if outcome in ("agree", "skip"):
+                self.state.user_agrees = True
+                result = self._get_next_statement()
+                if result:
+                    _, text = result
+                    current = self.argument.get_premise(self.state.current_premise or "")
+                    if current and current.choices:
+                        self._pending_choices = list(current.choices)
+                        text += self._format_choices(self._pending_choices)
+                    return text
+                return self.end()
+
+            if outcome == "disagree":
+                self.state.user_agrees = False
+                support = self._get_support()
+                if support:
+                    return support
+                # No more support — advance anyway
+                self.state.user_agrees = True
+                result = self._get_next_statement()
+                if result:
+                    _, text = result
+                    current = self.argument.get_premise(self.state.current_premise or "")
+                    if current and current.choices:
+                        self._pending_choices = list(current.choices)
+                        text += self._format_choices(self._pending_choices)
+                    return text
+                return self.end()
+
+            # clarify — re-present current statement with who/why context
+            if self.state.current_premise:
+                premise = self.argument.get_premise(self.state.current_premise)
+                if premise:
+                    for items in (premise.why, premise.what, premise.how):
+                        if items:
+                            return random.choice(items)
+            return "Could you tell me more about what you'd like clarified?"
+
+        # --- No pending choices: fall back to yes/no (KnowItAll style) ---
+        five_w = self._check_five_w(lower)
+        if five_w:
+            return five_w
+
+        if is_agreement(lower, lang=self.lang):
+            self.state.user_agrees = True
+            result = self._get_next_statement()
+            if result:
+                _, text = result
+                current = self.argument.get_premise(self.state.current_premise or "")
+                if current and current.choices:
+                    self._pending_choices = list(current.choices)
+                    text += self._format_choices(self._pending_choices)
+                return text
+            return self.end()
+
+        if is_disagreement(lower, lang=self.lang):
+            self.state.user_agrees = False
+            support = self._get_support()
+            if support:
+                return support
+            self.state.user_agrees = True
+            result = self._get_next_statement()
+            if result:
+                _, text = result
+                current = self.argument.get_premise(self.state.current_premise or "")
+                if current and current.choices:
+                    self._pending_choices = list(current.choices)
+                    text += self._format_choices(self._pending_choices)
+                return text
+            return self.end()
+
+        # Ambiguous input — present first statement again with choices
+        result = self._get_next_statement()
+        if result:
+            _, text = result
+            current = self.argument.get_premise(self.state.current_premise or "")
+            if current and current.choices:
+                self._pending_choices = list(current.choices)
+                text += self._format_choices(self._pending_choices)
+            return text
+        return self.end()
+
+    def start(self) -> str:
+        """Start the dialog, presenting the first statement with its choices.
+
+        Returns:
+            Intro text followed by the first statement and its options if any.
+        """
+        intro = super().start()
+        result = self._get_next_statement()
+        if result:
+            _, text = result
+            current = self.argument.get_premise(self.state.current_premise or "")
+            if current and current.choices:
+                self._pending_choices = list(current.choices)
+                text += self._format_choices(self._pending_choices)
+            return f"{intro}\n\n{text}" if intro else text
+        return intro
+
+
 # Registry mapping lowercase names to policy classes.
 POLICY_REGISTRY: dict[str, type[BasePolicy]] = {
     "knowitall": KnowItAllPolicy,
@@ -1515,6 +1719,7 @@ POLICY_REGISTRY: dict[str, type[BasePolicy]] = {
     "debater": DebaterPolicy,
     "minimalist": MinimalistPolicy,
     "adaptive": AdaptivePolicy,
+    "multichoice": MultiChoicePolicy,
     # WebhookPolicy intentionally excluded — requires webhook_url constructor arg
 }
 
