@@ -189,7 +189,22 @@ class BasePolicy(ABC):
         
         # No more statements
         return None
-    
+
+    def _peek_next_statement(self) -> tuple[str, str] | None:
+        """Return the next statement text without marking it as spoken."""
+        if self.state.current_premise:
+            premise = self.argument.get_premise(self.state.current_premise)
+            if premise:
+                stmt = premise.get_next_statement(self.state.spoken_statements)
+                if stmt:
+                    return (self.state.current_premise, stmt.text)
+        premise = self.argument.get_next_premise(self.state.spoken_premises)
+        if premise:
+            stmt = premise.get_next_statement(self.state.spoken_statements)
+            if stmt:
+                return (premise.name, stmt.text)
+        return None
+
     def _get_support(self) -> str | None:
         """Get support statement for current premise.
         
@@ -407,7 +422,7 @@ class KnowItAllPolicy(BasePolicy):
             return str(self.argument.conclusion)
         
         premise_name, statement = result
-        return f"{statement}\nDo you agree? (y/n) "
+        return f"{statement}\nDo you agree? (yes/no) "
     
     def _handle_disagreement(self) -> str:
         """Handle user disagreement.
@@ -418,7 +433,7 @@ class KnowItAllPolicy(BasePolicy):
         support = self._get_support()
         
         if support:
-            return f"{support}\nDo you agree now? (y/n) "
+            return f"{support}\nDo you agree now? (yes/no) "
         
         sources = self._get_sources()
         if sources:
@@ -549,7 +564,7 @@ class SocraticPolicy(BasePolicy):
             return str(self.argument.conclusion)
         
         premise_name, statement = result
-        return f"{statement}\nDo you agree? (y/n) "
+        return f"{statement}\nDo you agree? (yes/no) "
 
 
 class DebatePolicy(BasePolicy):
@@ -621,7 +636,7 @@ class DebatePolicy(BasePolicy):
         if support:
             intro = random.choice(self.CHALLENGE_RESPONSES)
             self.state.challenge_count += 1
-            return f"{intro}{support}\n\nDo you still disagree? (y/n) "
+            return f"{intro}{support}\n\nDo you still disagree? (yes/no) "
 
         # No specific support - use generic challenge
         self.state.challenge_count += 1
@@ -630,7 +645,7 @@ class DebatePolicy(BasePolicy):
             self.agree()
             return self._advance() or "I see you're not convinced. Let's continue."
         
-        return "I don't have more arguments on this point, but I maintain my position.\nShall we move on? (y/n) "
+        return "I don't have more arguments on this point, but I maintain my position.\nShall we move on? (yes/no) "
     
     def _advance(self) -> str | None:
         """Advance to next statement.
@@ -645,7 +660,7 @@ class DebatePolicy(BasePolicy):
             return str(self.argument.conclusion)
         
         premise_name, statement = result
-        return f"{statement}\nDo you agree? (y/n) "
+        return f"{statement}\nDo you agree? (yes/no) "
 
 
 class ExploratoryPolicy(BasePolicy):
@@ -700,7 +715,7 @@ class ExploratoryPolicy(BasePolicy):
 
             support = self._get_support()
             if support:
-                return f"{acknowledgment}\n\nSome perspectives on this topic include: {support}\n\nWhat do you think? (y/n) "
+                return f"{acknowledgment}\n\nSome perspectives on this topic include: {support}\n\nWhat do you think? (yes/no) "
 
             sources = self._get_sources()
             if sources:
@@ -725,7 +740,7 @@ class ExploratoryPolicy(BasePolicy):
             return str(self.argument.conclusion)
         
         premise_name, statement = result
-        return f"{statement}\nWhat's your view? (y/n) "
+        return f"{statement}\nWhat's your view? (yes/no) "
 
 
 class MaieuticPolicy(BasePolicy):
@@ -779,7 +794,7 @@ class MaieuticPolicy(BasePolicy):
             next_stmt = self._get_next_statement()
             if next_stmt:
                 _, statement = next_stmt
-                return f"{statement}\nDo you agree? (y/n) "
+                return f"{statement}\nDo you agree? (yes/no) "
             self.state.finished = True
             return str(self.argument.conclusion)
 
@@ -794,7 +809,7 @@ class MaieuticPolicy(BasePolicy):
         if next_stmt:
             _, statement = next_stmt
             self.question_count = 0
-            return f"{statement}\nDo you agree? (y/n) "
+            return f"{statement}\nDo you agree? (yes/no) "
         self.state.finished = True
         return str(self.argument.conclusion)
 
@@ -837,6 +852,11 @@ class SkepticPolicy(BasePolicy):
             return five_w
 
         if is_agreement(user_lower):
+            # After a challenge, advance to next premise statement
+            next_stmt = self._get_next_statement()
+            if next_stmt is None:
+                self.state.finished = True
+                return str(self.argument.conclusion)
             return random.choice(self.CHALLENGE_PHRASES)
 
         if is_disagreement(user_lower):
@@ -845,6 +865,8 @@ class SkepticPolicy(BasePolicy):
                 _, statement = next_stmt
                 prefix = random.choice(self.COUNTER_PHRASES)
                 return f"{prefix}{statement}"
+            self.state.finished = True
+            return str(self.argument.conclusion)
 
         return "I need more convincing. What specific evidence can you provide?"
 
@@ -891,7 +913,13 @@ class TeacherPolicy(BasePolicy):
             return random.choice(self.TRANSITION_PHRASES) + " " + self._get_explanation()
 
         if is_agreement(user_lower):
-            return self._reinforce_concept()
+            # Consume and advance to next statement with reinforcement framing
+            next_stmt = self._get_next_statement()
+            if next_stmt is None:
+                self.state.finished = True
+                return str(self.argument.conclusion)
+            summary = random.choice(self.SUMMARY_PHRASES)
+            return f"{summary}{next_stmt[1]}"
 
         if is_disagreement(user_lower):
             return self._clarify_misconception()
@@ -899,7 +927,8 @@ class TeacherPolicy(BasePolicy):
         return self._teach_with_example()
 
     def _get_explanation(self) -> str:
-        next_stmt = self._get_next_statement()
+        # Peek without consuming — agreement will advance on next turn
+        next_stmt = self._peek_next_statement()
         if next_stmt:
             return next_stmt[1]
         return self.argument.conclusion
@@ -910,7 +939,8 @@ class TeacherPolicy(BasePolicy):
         return f"{summary}{explanation}"
 
     def _clarify_misconception(self) -> str:
-        next_stmt = self._get_next_statement()
+        # Peek without consuming — re-presents the same statement for next turn
+        next_stmt = self._peek_next_statement()
         if next_stmt:
             _, statement = next_stmt
             return f"Let me clarify: {statement}"
@@ -922,6 +952,7 @@ class TeacherPolicy(BasePolicy):
             _, statement = next_stmt
             example_intro = random.choice(self.EXAMPLE_INTROS)
             return f"{example_intro}{statement}"
+        self.state.finished = True
         return self.argument.conclusion
 
 

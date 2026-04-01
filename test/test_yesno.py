@@ -154,29 +154,49 @@ def test_is_disagreement_default_true_on_ambiguous() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Integration — actual ovos-solver-yes-no-plugin (installed dep)
+# Integration — actual ovos-solver-yes-no-plugin (skipped if not loadable)
 # ---------------------------------------------------------------------------
 
+def _real_solver_available() -> bool:
+    try:
+        from difficult_dialogs.yesno import _load_solver
+        _load_solver()
+        return True
+    except RuntimeError:
+        return False
+
+
+_skip_integration = pytest.mark.skipif(
+    not _real_solver_available(),
+    reason="ovos-solver-yes-no-plugin opm.agents.yesno entry-point not available",
+)
+
+
+@_skip_integration
 def test_integration_yes() -> None:
-    yesno_module._solver = None  # force real plugin load
+    yesno_module._solver = None
     assert parse_yes_no("yes") is True
 
 
+@_skip_integration
 def test_integration_no() -> None:
     yesno_module._solver = None
     assert parse_yes_no("nope") is False
 
 
+@_skip_integration
 def test_integration_ambiguous() -> None:
     yesno_module._solver = None
     assert parse_yes_no("hmm") is None
 
 
+@_skip_integration
 def test_integration_agree_phrase() -> None:
     yesno_module._solver = None
     assert parse_yes_no("I agree") is True
 
 
+@_skip_integration
 def test_integration_disagree_phrase() -> None:
     yesno_module._solver = None
     assert parse_yes_no("I disagree") is False

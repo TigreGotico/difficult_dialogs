@@ -4,8 +4,7 @@ Loads a yes/no solver via the ``opm.agents.yesno`` entry-point group.
 The default plugin is ``ovos-solver-yes-no-plugin`` (a hard dependency).
 Users can replace it with any compatible ``opm.agents.yesno`` plugin.
 
-Entry-point group: ``opm.agents.yesno``
-Default plugin:    ``ovos-solver-yes-no-plugin``
+Default plugin: ``ovos-solver-yes-no-plugin``
 """
 from __future__ import annotations
 
@@ -16,7 +15,7 @@ from typing import Protocol, runtime_checkable
 logger = logging.getLogger(__name__)
 
 _DEFAULT_PLUGIN = "ovos-solver-yes-no-plugin"
-_ENTRY_POINT_GROUP = "opm.agents.yesno"
+_ENTRY_POINT_GROUPS = ("opm.agents.yesno",)
 
 
 # ---------------------------------------------------------------------------
@@ -50,10 +49,10 @@ def _load_solver(plugin_name: str = _DEFAULT_PLUGIN) -> YesNoSolverProtocol:
     Raises:
         RuntimeError: If no compatible plugin can be loaded.
     """
-    eps = {
-        ep.name: ep
-        for ep in importlib.metadata.entry_points(group=_ENTRY_POINT_GROUP)
-    }
+    eps: dict[str, importlib.metadata.EntryPoint] = {}
+    for group in _ENTRY_POINT_GROUPS:
+        for ep in importlib.metadata.entry_points(group=group):
+            eps.setdefault(ep.name, ep)  # first group wins on name collision
 
     for name in (plugin_name, *eps.keys()):
         if name not in eps:
@@ -71,7 +70,7 @@ def _load_solver(plugin_name: str = _DEFAULT_PLUGIN) -> YesNoSolverProtocol:
             )
 
     raise RuntimeError(
-        f"No usable opm.agents.yesno plugin found. "
+        f"No usable yes/no plugin found in {_ENTRY_POINT_GROUPS}. "
         f"Install the default: pip install ovos-solver-yes-no-plugin. "
         f"Available: {list(eps)}"
     )
