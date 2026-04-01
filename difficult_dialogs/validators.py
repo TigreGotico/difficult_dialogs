@@ -84,6 +84,7 @@ class ArgumentValidator:
             self._validate_logical_consistency,
             self._validate_sources,
             self._validate_five_ws,
+            self._validate_graph,
         ]
     
     def validate(self, argument: Argument) -> ValidationResult:
@@ -350,6 +351,95 @@ class ArgumentValidator:
                     f"Premise '{premise.name}' missing Five-Ws fields: {missing}",
                     "five_ws",
                 )
+
+
+    def _validate_graph(self, argument: Argument, result: ValidationResult) -> None:
+        """Validate branching graph edges for dangling references and cycles.
+
+        Checks:
+
+        * **Dangling ``on_agree`` / ``on_disagree``**: the named target does not
+          exist in the argument — ``ERROR``.
+        * **Dangling ``ChoiceOption.next_premise``**: same — ``ERROR``.
+        * **Cycles**: a directed cycle in the graph will cause the dialog to loop
+          forever — ``CRITICAL``.
+
+        Flat arguments with no branching edges pass silently.
+
+        Args:
+            argument: Argument to inspect.
+            result: Accumulator for issues found.
+        """
+        all_names: set[str] = set(argument.premise_names)
+
+        # Build adjacency: premise_name → set of reachable names via graph edges
+        adjacency: dict[str, set[str]] = {name: set() for name in all_names}
+
+        for name, premise in argument._premises.items():
+            if premise.on_agree:
+                if premise.on_agree not in all_names:
+                    result.add_issue(
+                        ValidationSeverity.ERROR,
+                        f"Premise '{name}' on_agree → '{premise.on_agree}' does not exist",
+                        "graph",
+                    )
+                else:
+                    adjacency[name].add(premise.on_agree)
+
+            if premise.on_disagree:
+                if premise.on_disagree not in all_names:
+                    result.add_issue(
+                        ValidationSeverity.ERROR,
+                        f"Premise '{name}' on_disagree → '{premise.on_disagree}' does not exist",
+                        "graph",
+                    )
+                else:
+                    adjacency[name].add(premise.on_disagree)
+
+            for choice in premise.choices:
+                if choice.next_premise and choice.next_premise not in all_names:
+                    result.add_issue(
+                        ValidationSeverity.ERROR,
+                        f"Premise '{name}' choice '{choice.label}' → '{choice.next_premise}' does not exist",
+                        "graph",
+                    )
+                elif choice.next_premise:
+                    adjacency[name].add(choice.next_premise)
+
+        # Cycle detection via recursive DFS with explicit call stack
+        # Colors: 0 = unvisited, 1 = in current path (gray), 2 = done (black)
+        color: dict[str, int] = {name: 0 for name in all_names}
+        parent: dict[str, str | None] = {name: None for name in all_names}
+
+        def _dfs(node: str) -> list[str] | None:
+            color[node] = 1  # mark as in-progress
+            for neighbour in adjacency.get(node, set()):
+                if color[neighbour] == 1:
+                    # back edge → cycle; reconstruct path
+                    path = [neighbour, node]
+                    cur = node
+                    while cur != neighbour and parent[cur] is not None:
+                        cur = parent[cur]  # type: ignore[assignment]
+                        path.append(cur)
+                    return list(reversed(path))
+                if color[neighbour] == 0:
+                    parent[neighbour] = node
+                    result_path = _dfs(neighbour)
+                    if result_path is not None:
+                        return result_path
+            color[node] = 2  # done
+            return None
+
+        for name in all_names:
+            if color[name] == 0:
+                cycle_path = _dfs(name)
+                if cycle_path:
+                    result.add_issue(
+                        ValidationSeverity.CRITICAL,
+                        f"Cycle detected in argument graph: {' → '.join(cycle_path)}",
+                        "graph",
+                    )
+                    break  # one cycle report is enough
 
 
 def validate_argument(argument: Argument) -> ValidationResult:
