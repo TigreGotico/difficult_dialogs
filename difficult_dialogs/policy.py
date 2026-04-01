@@ -284,6 +284,26 @@ class BasePolicy(ABC):
 
         return None
 
+    def save_state(self, path: str | Path) -> None:
+        """Persist session state to a JSON file.
+
+        Args:
+            path: Destination file path (created or overwritten).
+        """
+        import json
+        from pathlib import Path as _Path
+        _Path(path).write_text(json.dumps(self.state.to_dict(), indent=2))
+
+    def load_state(self, path: str | Path) -> None:
+        """Restore session state from a JSON file written by :meth:`save_state`.
+
+        Args:
+            path: Path to a JSON file previously produced by ``save_state()``.
+        """
+        import json
+        from pathlib import Path as _Path
+        self.restore_state(json.loads(_Path(path).read_text()))
+
     def restore_state(self, state: PolicyState | dict) -> None:
         """Restore a previously serialised session state.
 
@@ -1150,6 +1170,21 @@ class AdaptivePolicy(BasePolicy):
     # ------------------------------------------------------------------
     # Public interface
     # ------------------------------------------------------------------
+
+    def set_policy(self, policy: BasePolicy) -> None:
+        """Manually override the active delegate policy.
+
+        Transfers the current shared state into *policy* immediately so no
+        transcript or spoken-premises history is lost.
+
+        Args:
+            policy: A fully constructed :class:`BasePolicy` instance to
+                activate.  It must have been created with the same
+                :class:`~difficult_dialogs.arguments.Argument`.
+        """
+        self._sync_state()
+        policy.state = self._active.state
+        self._active = policy
 
     @property
     def switched(self) -> bool:

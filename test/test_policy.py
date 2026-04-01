@@ -853,3 +853,67 @@ def test_transcript_entry_round_trip() -> None:
     restored = TranscriptEntry.from_dict(entry.to_dict())
     assert restored.role == "user"
     assert restored.text == "Hello world"
+
+
+# ---------------------------------------------------------------------------
+# save_state / load_state
+# ---------------------------------------------------------------------------
+
+def test_save_and_load_state_round_trip(tmp_path) -> None:
+    """save_state/load_state preserves spoken premises and transcript."""
+    policy = KnowItAllPolicy(make_arg())
+    policy.start()
+    policy.respond("yes")
+    path = tmp_path / "session.json"
+    policy.save_state(path)
+
+    policy2 = KnowItAllPolicy(make_arg())
+    policy2.load_state(path)
+    assert policy2.state.spoken_premises == policy.state.spoken_premises
+    assert len(policy2.state.transcript) == len(policy.state.transcript)
+    assert policy2.state.finished == policy.state.finished
+
+
+def test_save_state_creates_valid_json(tmp_path) -> None:
+    """save_state writes valid JSON."""
+    import json
+    policy = KnowItAllPolicy(make_arg())
+    policy.start()
+    path = tmp_path / "state.json"
+    policy.save_state(path)
+    data = json.loads(path.read_text())
+    assert "spoken_premises" in data
+    assert "transcript" in data
+
+
+# ---------------------------------------------------------------------------
+# AdaptivePolicy.set_policy
+# ---------------------------------------------------------------------------
+
+def test_adaptive_set_policy_transfers_state() -> None:
+    """set_policy transfers transcript and spoken_premises to new delegate."""
+    from difficult_dialogs.policy import AdaptivePolicy, SocraticPolicy
+    arg = make_arg()
+    policy = AdaptivePolicy(arg)
+    policy.start()
+    policy.respond("yes")
+
+    original_transcript_len = len(policy.state.transcript)
+    original_spoken = set(policy.state.spoken_premises)
+
+    policy.set_policy(SocraticPolicy(arg))
+    # State must be preserved after the switch
+    assert len(policy.state.transcript) == original_transcript_len
+    assert policy.state.spoken_premises == original_spoken
+    assert isinstance(policy.active_policy, SocraticPolicy)
+
+
+def test_adaptive_set_policy_active_policy_property() -> None:
+    """active_policy reflects new policy after set_policy."""
+    from difficult_dialogs.policy import AdaptivePolicy, TeacherPolicy
+    arg = make_arg()
+    policy = AdaptivePolicy(arg)
+    policy.start()
+    new = TeacherPolicy(arg)
+    policy.set_policy(new)
+    assert policy.active_policy is new
