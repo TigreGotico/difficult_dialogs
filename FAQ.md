@@ -91,3 +91,32 @@ A: `ArgumentValidator` (importable from `difficult_dialogs`) scores arguments an
 
 **Q: How do I use a custom yes/no solver (e.g. for non-English)?**
 A: Call `set_solver(my_solver)` or `configure(plugin_name)` from `difficult_dialogs` at startup to replace the default OPM plugin.
+
+## Multiple Choice & Branching
+
+**Q: How do I add multiple-choice options to a premise?**
+A: Add a `.choices` file in the premise directory, one option per line:
+```
+A) I agree completely -> next_premise
+B) I need more evidence [clarify]
+C) I disagree [disagree]
+```
+Or use the builder: `PremiseBuilder.choice(text, outcome, next_premise)`.
+Use `MultiChoicePolicy` to present the menu to users.
+
+**Q: How do I make arguments branch instead of going linearly?**
+A: Add `.on_agree` and/or `.on_disagree` files to any premise, each containing the name of the next premise to visit:
+```
+# human_causation.on_agree
+economic_impacts
+```
+Or via the builder: `PremiseBuilder.on_agree("economic_impacts")`. The argument becomes a directed graph; existing arguments without these files remain linear.
+
+**Q: What happens if `on_agree` points to a premise that doesn't exist?**
+A: `Argument.next_premise()` returns `None` — the policy will end the dialog. Always validate argument graphs with `did validate` or `ArgumentValidator`.
+
+**Q: Can I mix branching and linear premises in the same argument?**
+A: Yes. Only premises with `.on_agree`/`.on_disagree` branch; the rest follow insertion order. The traversal falls back to linear for any edge without an explicit target.
+
+**Q: How do I plug in an OPM reranker/multiple_choice solver?**
+A: Implement `ChoiceSolverProtocol` (`choices.py`) and pass it to `MultiChoicePolicy(arg, choice_solver=my_solver)`. A future version will auto-discover OPM `opm.agents.reranker` plugins the same way yes/no solvers are discovered via `opm.agents.yesno`.

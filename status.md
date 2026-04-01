@@ -7,4 +7,4 @@
 - [x] Step 5: Update `builder.py` — choice(), on_agree(), on_disagree(), entry_point() fluent methods
 - [x] Step 6: Update `__init__.py` — export new symbols
 - [x] Step 7: Write tests — test_choices.py, test_branching.py, test_multichoice_policy.py, test_builder_choices.py
-- [ ] Step 8: Update docs — argument-format.md, POLICIES.md, index.md, FAQ.md
+- [x] Step 8: Update docs — argument-format.md, POLICIES.md, index.md, FAQ.md

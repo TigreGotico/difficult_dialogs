@@ -24,6 +24,7 @@
    - [WebhookPolicy](#webhookpolicy)
    - [MultiArgumentPolicy](#multiargumentpolicy)
    - [LLMEnhancedPolicy](#llmenhancedpolicy)
+   - [MultiChoicePolicy](#multichoicepolicy)
 4. [Policy Comparison Matrix](#policy-comparison-matrix)
 5. [When to Use Each Policy](#when-to-use-each-policy)
 6. [Creating Custom Policies](#creating-custom-policies)
@@ -853,6 +854,75 @@ policy.start()
 
 ---
 
+---
+
+## MultiChoicePolicy
+
+**Registry name:** `"multichoice"`
+
+Presents labelled options (A, B, C…) to the user each turn. When the current
+premise has a `.choices` file, the bot appends the choice menu to its statement.
+The user selects by letter, number, or text prefix.  On a valid selection the
+policy resolves the outcome (`agree` / `disagree` / `clarify` / `skip`) and
+advances via:
+
+1. The choice's explicit `next_premise` target, if set.
+2. The premise's `on_agree` / `on_disagree` graph edge.
+3. Linear insertion-order fallback (same as all other policies).
+
+If the premise has **no** `.choices` file, `MultiChoicePolicy` falls back to
+standard yes/no behaviour (identical to `KnowItAllPolicy`).
+
+**Class:** `MultiChoicePolicy` — `policy.py`
+
+```python
+from difficult_dialogs import MultiChoicePolicy, Argument
+
+arg = Argument.from_directory("examples/branching_argument")
+policy = MultiChoicePolicy(arg)
+
+# Optional: plug in an OPM-compatible choice solver
+# from my_plugin import MyChoiceSolver
+# policy = MultiChoicePolicy(arg, choice_solver=MyChoiceSolver())
+
+print(policy.start())
+```
+
+**Custom choice solver:**
+
+```python
+from difficult_dialogs.choices import ChoiceSolverProtocol, ChoiceOption
+
+class MyFuzzyChoiceSolver:
+    def match_choice(self, text: str, options: list[ChoiceOption], lang: str) -> ChoiceOption | None:
+        # fuzzy match, LLM call, or OPM reranker here
+        ...
+
+policy = MultiChoicePolicy(arg, choice_solver=MyFuzzyChoiceSolver())
+```
+
+The default offline solver matches by label letter (A/B/C), 1-based index, or
+text prefix (≥ 3 chars) — no LLM required.
+
+**Example `.choices` file:**
+
+```
+A) I agree completely -> economic_impacts
+B) I need more evidence [clarify]
+C) I disagree [disagree]
+```
+
+See [argument-format.md](argument-format.md) for the full file format.
+
+#### When to Use
+
+- Dialogue trees, decision flows, or quizzes with explicit branching.
+- Users unfamiliar with the topic (offering labelled options removes ambiguity).
+- Accessibility contexts where free-text is impractical.
+- Any argument where you want richer user feedback than yes/no.
+
+---
+
 ## Policy Comparison Matrix
 
 | Feature | Silent | KnowItAll | Socratic | Debate | Exploratory |
@@ -875,6 +945,7 @@ policy.start()
 | WebhookPolicy | Yes | Yes (fallback) | Yes (fallback) | No | No |
 | MultiArgumentPolicy | Yes | Yes (via inner) | Yes (via inner) | Depends on inner | Yes |
 | LLMEnhancedPolicy | Yes | Yes (via inner) | Yes (via inner) | Depends on inner | Yes |
+| MultiChoicePolicy | Yes | Yes | Yes | No | Yes |
 
 ### Response Style Comparison
 
