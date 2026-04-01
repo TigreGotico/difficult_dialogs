@@ -239,16 +239,32 @@ def cmd_debate(args: argparse.Namespace) -> int:
     print(f"BOT: {policy.start()}")
     print()
     
+    # Prepare input source
+    input_lines: list[str] | None = None
+    if getattr(args, "input_file", None):
+        try:
+            input_lines = Path(args.input_file).read_text().splitlines()
+        except OSError as e:
+            print(f"❌ Error reading input file: {e}")
+            return 1
+
+    def _next_input(prompt: str) -> str:
+        if input_lines:
+            line = input_lines.pop(0) if input_lines else ""
+            print(f"{prompt}{line}")
+            return line
+        return input(prompt)
+
     # Interactive loop
     try:
         while not policy.state.finished:
-            user_input = input("USER: ").strip()
+            user_input = _next_input("USER: ").strip()
 
             if user_input.lower() in ('quit', 'exit', 'q'):
                 print(f"\nBOT: {policy.end()}")
                 break
 
-            response = policy.handle_input(user_input)
+            response = policy.respond(user_input)
 
             if response:
                 print(f"BOT: {response}")
@@ -545,6 +561,11 @@ def main() -> int:
         "--save-transcript",
         metavar="FILE",
         help="Save the conversation transcript to a Markdown file after the session ends",
+    )
+    deb_parser.add_argument(
+        "--input-file",
+        metavar="FILE",
+        help="Read user turns from a file (one per line) instead of stdin — useful for scripting and CI",
     )
     deb_parser.set_defaults(func=cmd_debate)
     

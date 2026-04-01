@@ -1,4 +1,5 @@
 """Tests for CLI functionality."""
+import argparse
 import pytest
 import subprocess
 import sys
@@ -624,6 +625,60 @@ class TestCmdDebateDirect:
         with patch("builtins.input", return_value="quit"):
             rc = cmd_debate(ns)
         assert rc == 0
+
+
+class TestDebateInputFile:
+    """Tests for dd debate --input-file."""
+
+    def _make_arg_dir(self, tmp_path) -> Path:
+        from difficult_dialogs.arguments import Argument
+        from difficult_dialogs.premises import Premise
+        arg = Argument(name="file input test", intro="Intro.", conclusion="Done.")
+        p = Premise(name="p1")
+        p.add_statement("Statement one.")
+        arg.add_premise(p)
+        d = tmp_path / "file_input_arg"
+        arg.save(d)
+        return d
+
+    def test_input_file_runs_to_completion(self, tmp_path) -> None:
+        """debate --input-file reads turns from file and finishes without stdin."""
+        from difficult_dialogs.cli import cmd_debate
+        arg_dir = self._make_arg_dir(tmp_path)
+        turns = tmp_path / "turns.txt"
+        turns.write_text("yes\nyes\nyes\n")
+
+        ns = argparse.Namespace(
+            argument=str(arg_dir),
+            policy="knowitall",
+            save_transcript=None,
+            input_file=str(turns),
+        )
+        rc = cmd_debate(ns)
+        assert rc == 0
+
+    def test_input_file_not_found_returns_1(self, tmp_path) -> None:
+        """debate --input-file returns 1 when file does not exist."""
+        from difficult_dialogs.cli import cmd_debate
+        arg_dir = self._make_arg_dir(tmp_path)
+
+        ns = argparse.Namespace(
+            argument=str(arg_dir),
+            policy="knowitall",
+            save_transcript=None,
+            input_file=str(tmp_path / "nonexistent.txt"),
+        )
+        rc = cmd_debate(ns)
+        assert rc == 1
+
+    def test_debate_help_shows_input_file(self) -> None:
+        """debate --help mentions --input-file."""
+        result = subprocess.run(
+            [sys.executable, "-m", "difficult_dialogs.cli", "debate", "--help"],
+            capture_output=True,
+            text=True,
+        )
+        assert "--input-file" in result.stdout
 
 
 if __name__ == "__main__":
