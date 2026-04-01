@@ -105,6 +105,12 @@ class StartResponse(BaseModel):
     intro: str
 
 
+# Pydantic v2 requires model_rebuild() when from __future__ import annotations
+# causes type annotations to be strings that need explicit resolution.
+SessionResponse.model_rebuild()
+StatePayload.model_rebuild()
+
+
 class ChatResponse(BaseModel):
     """Response to POST /sessions/{session_id}/chat."""
     response: str | None
