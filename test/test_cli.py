@@ -681,5 +681,118 @@ class TestDebateInputFile:
         assert "--input-file" in result.stdout
 
 
+class TestCmdScore:
+    """Tests for `did score`."""
+
+    def _make_good_arg(self, tmp_path: Path) -> Path:
+        from difficult_dialogs.arguments import Argument
+        from difficult_dialogs.premises import Premise
+        arg = Argument(name="score test", intro="Intro.", conclusion="Done.")
+        for i in range(3):
+            p = Premise(name=f"premise_{i}", description="desc")
+            p.add_statement(f"Statement {i}.")
+            p.add_support(f"Support {i}.")
+            arg.add_premise(p)
+        d = tmp_path / "score_arg"
+        arg.save(d)
+        return d
+
+    def test_score_good_argument_exits_0(self, tmp_path: Path) -> None:
+        from difficult_dialogs.cli import cmd_score
+        ns = argparse.Namespace(argument=str(self._make_good_arg(tmp_path)))
+        rc = cmd_score(ns)
+        assert rc == 0
+
+    def test_score_missing_path_exits_1(self, tmp_path: Path) -> None:
+        from difficult_dialogs.cli import cmd_score
+        ns = argparse.Namespace(argument=str(tmp_path / "nope"))
+        rc = cmd_score(ns)
+        assert rc == 1
+
+    def test_score_output_contains_percent(self, tmp_path: Path, capsys) -> None:
+        from difficult_dialogs.cli import cmd_score
+        ns = argparse.Namespace(argument=str(self._make_good_arg(tmp_path)))
+        cmd_score(ns)
+        out = capsys.readouterr().out
+        assert "%" in out
+
+    def test_score_help(self) -> None:
+        result = subprocess.run(
+            [sys.executable, "-m", "difficult_dialogs.cli", "score", "--help"],
+            capture_output=True, text=True,
+        )
+        assert result.returncode == 0
+        assert "score" in result.stdout
+
+
+class TestCmdReplay:
+    """Tests for `did replay`."""
+
+    def _write_transcript(self, tmp_path: Path, entries: list) -> Path:
+        import json
+        p = tmp_path / "transcript.json"
+        p.write_text(json.dumps(entries))
+        return p
+
+    def test_replay_list_format(self, tmp_path: Path, capsys) -> None:
+        from difficult_dialogs.cli import cmd_replay
+        entries = [
+            {"role": "bot", "text": "Hello!"},
+            {"role": "user", "text": "Yes."},
+            {"role": "bot", "text": "Great."},
+        ]
+        path = self._write_transcript(tmp_path, entries)
+        rc = cmd_replay(argparse.Namespace(transcript=str(path)))
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "BOT:  Hello!" in out
+        assert "USER: Yes." in out
+
+    def test_replay_state_dict_format(self, tmp_path: Path, capsys) -> None:
+        from difficult_dialogs.cli import cmd_replay
+        import json
+        state = {
+            "spoken_premises": [],
+            "transcript": [
+                {"role": "bot", "text": "Intro."},
+                {"role": "user", "text": "Sure."},
+            ],
+            "finished": False,
+        }
+        path = tmp_path / "state.json"
+        path.write_text(json.dumps(state))
+        rc = cmd_replay(argparse.Namespace(transcript=str(path)))
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "BOT:" in out
+
+    def test_replay_missing_file_exits_1(self, tmp_path: Path) -> None:
+        from difficult_dialogs.cli import cmd_replay
+        rc = cmd_replay(argparse.Namespace(transcript=str(tmp_path / "nope.json")))
+        assert rc == 1
+
+    def test_replay_invalid_json_exits_1(self, tmp_path: Path) -> None:
+        from difficult_dialogs.cli import cmd_replay
+        bad = tmp_path / "bad.json"
+        bad.write_text("not json {{{")
+        rc = cmd_replay(argparse.Namespace(transcript=str(bad)))
+        assert rc == 1
+
+    def test_replay_empty_transcript(self, tmp_path: Path, capsys) -> None:
+        from difficult_dialogs.cli import cmd_replay
+        path = self._write_transcript(tmp_path, [])
+        rc = cmd_replay(argparse.Namespace(transcript=str(path)))
+        assert rc == 0
+        assert "empty" in capsys.readouterr().out
+
+    def test_replay_help(self) -> None:
+        result = subprocess.run(
+            [sys.executable, "-m", "difficult_dialogs.cli", "replay", "--help"],
+            capture_output=True, text=True,
+        )
+        assert result.returncode == 0
+        assert "transcript" in result.stdout
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

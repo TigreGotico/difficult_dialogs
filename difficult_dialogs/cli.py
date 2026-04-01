@@ -286,6 +286,77 @@ def cmd_debate(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_score(args: argparse.Namespace) -> int:
+    """Print a one-line quality score for an argument directory."""
+    from difficult_dialogs.arguments import Argument
+    from difficult_dialogs.validators import ArgumentValidator
+
+    path = Path(args.argument)
+    if not path.exists():
+        print(f"❌ Error: Argument not found: {path}")
+        return 1
+
+    try:
+        argument = Argument.from_directory(path)
+    except Exception as exc:
+        print(f"❌ Error loading argument: {exc}")
+        return 1
+
+    result = ArgumentValidator().validate(argument)
+    label = "EXCELLENT" if result.score >= 0.9 else (
+        "GOOD" if result.score >= 0.7 else (
+            "FAIR" if result.score >= 0.5 else "POOR"
+        )
+    )
+    icon = "✅" if result.passed else "❌"
+    print(f"{icon} {argument.name}: {result.score:.0%}  [{label}]")
+    if not result.passed:
+        from difficult_dialogs.validators import ValidationSeverity
+        for issue in result.issues:
+            if issue.severity >= ValidationSeverity.ERROR:
+                print(f"   {issue.severity.name}: {issue.message}")
+    return 0 if result.passed else 2
+
+
+def cmd_replay(args: argparse.Namespace) -> int:
+    """Replay a saved session transcript non-interactively."""
+    import json
+
+    path = Path(args.transcript)
+    if not path.exists():
+        print(f"❌ Error: Transcript file not found: {path}")
+        return 1
+
+    try:
+        raw = json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError) as exc:
+        print(f"❌ Error reading transcript: {exc}")
+        return 1
+
+    # Accept both formats: list of entries OR full state dict
+    if isinstance(raw, list):
+        entries = raw
+    elif isinstance(raw, dict) and "transcript" in raw:
+        entries = raw["transcript"]
+    else:
+        print("❌ Unrecognised transcript format. Expected a list or a state dict with 'transcript' key.")
+        return 1
+
+    if not entries:
+        print("(empty transcript)")
+        return 0
+
+    for entry in entries:
+        role = entry.get("role", "?")
+        text = entry.get("text", "")
+        if role == "bot":
+            print(f"BOT:  {text}")
+        else:
+            print(f"USER: {text}")
+
+    return 0
+
+
 def cmd_list(args: argparse.Namespace) -> int:
     """List available arguments."""
     from difficult_dialogs.arguments import Argument
@@ -582,6 +653,30 @@ def main() -> int:
         help="Directory to save the argument in (default: current dir)",
     )
     new_parser.set_defaults(func=cmd_new)
+
+    # Score command
+    score_parser = subparsers.add_parser(
+        "score",
+        aliases=["sc"],
+        help="Print a one-line quality score for an argument directory",
+    )
+    score_parser.add_argument(
+        "argument",
+        help="Path to argument directory",
+    )
+    score_parser.set_defaults(func=cmd_score)
+
+    # Replay command
+    replay_parser = subparsers.add_parser(
+        "replay",
+        aliases=["rp"],
+        help="Replay a saved session transcript non-interactively",
+    )
+    replay_parser.add_argument(
+        "transcript",
+        help="Path to a JSON transcript file (saved by --save-transcript or export_transcript_to_json)",
+    )
+    replay_parser.set_defaults(func=cmd_replay)
 
     # List command
     list_parser = subparsers.add_parser(
