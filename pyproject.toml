@@ -62,7 +62,7 @@ all = [
 
 [project.scripts]
 difficult-dialogs = "difficult_dialogs.cli:main"
-dd = "difficult_dialogs.cli:main"
+did = "difficult_dialogs.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/JarbasAl/difficult_dialogs"

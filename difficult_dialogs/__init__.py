@@ -38,6 +38,17 @@ from difficult_dialogs.policy import (
 from difficult_dialogs.yesno import parse_yes_no, is_agreement, is_disagreement, set_solver, configure
 from difficult_dialogs.library import ArgumentLibrary, SearchResult
 from difficult_dialogs.builder import ArgumentBuilder, PremiseBuilder
+from difficult_dialogs.validators import (
+    ArgumentValidator,
+    ValidationResult,
+    ValidationSeverity,
+    ValidationIssue,
+)
+from difficult_dialogs.export.transcript import (
+    export_transcript_to_markdown,
+    export_transcript_to_json,
+)
+from difficult_dialogs.llm import ArgumentGenerator, LLMEnhancer, LLMClient
 from difficult_dialogs.version import __version__
 __all__ = [
     # Exceptions
@@ -84,4 +95,16 @@ __all__ = [
     # Policy registry
     "POLICY_REGISTRY",
     "get_policy",
+    # Validation
+    "ArgumentValidator",
+    "ValidationResult",
+    "ValidationSeverity",
+    "ValidationIssue",
+    # Transcript export
+    "export_transcript_to_markdown",
+    "export_transcript_to_json",
+    # LLM integration (optional)
+    "ArgumentGenerator",
+    "LLMEnhancer",
+    "LLMClient",
 ]
