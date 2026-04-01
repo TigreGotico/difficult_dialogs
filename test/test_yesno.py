@@ -7,7 +7,6 @@ from difficult_dialogs.yesno import (
     is_agreement,
     is_disagreement,
     set_solver,
-    _BuiltinYesNoSolver,
     _load_solver,
 )
 
@@ -20,201 +19,164 @@ def reset_solver():
     yesno_module._solver = original
 
 
-# ---------------------------------------------------------------------------
-# _BuiltinYesNoSolver — strong yes
-# ---------------------------------------------------------------------------
-
-@pytest.mark.parametrize("text", [
-    "yes", "Yes", "YES",
-    "yeah", "yep", "yup",
-    "correct", "confirmed", "agree", "agreed",
-    "absolutely", "indeed", "affirmative",
-    "I agree with that",
-    "that's correct",
-    "yes I think so",
-    "yep that sounds right",
-])
-def test_builtin_strong_yes(text: str) -> None:
-    s = _BuiltinYesNoSolver()
-    assert s.match_yes_or_no(text, "en-US") is True
-
-
-# ---------------------------------------------------------------------------
-# _BuiltinYesNoSolver — strong no
-# ---------------------------------------------------------------------------
-
-@pytest.mark.parametrize("text", [
-    "no", "No", "NO",
-    "nope", "nah",
-    "negative",
-    "disagree", "I disagree",
-    "incorrect", "false",
-    "I don't agree",
-    "nope not at all",
-])
-def test_builtin_strong_no(text: str) -> None:
-    s = _BuiltinYesNoSolver()
-    assert s.match_yes_or_no(text, "en-US") is False
-
-
-# ---------------------------------------------------------------------------
-# _BuiltinYesNoSolver — neutral yes
-# ---------------------------------------------------------------------------
-
-@pytest.mark.parametrize("text", [
-    "sure", "certainly", "definitely",
-    "of course", "fine", "alright",
-])
-def test_builtin_neutral_yes(text: str) -> None:
-    s = _BuiltinYesNoSolver()
-    assert s.match_yes_or_no(text, "en-US") is True
-
-
-# ---------------------------------------------------------------------------
-# _BuiltinYesNoSolver — neutral no
-# ---------------------------------------------------------------------------
-
-@pytest.mark.parametrize("text", [
-    "that's wrong", "that seems mistaken",
-    "that's a lie",
-])
-def test_builtin_neutral_no(text: str) -> None:
-    s = _BuiltinYesNoSolver()
-    assert s.match_yes_or_no(text, "en-US") is False
-
-
-# ---------------------------------------------------------------------------
-# _BuiltinYesNoSolver — ambiguous / neutral
-# ---------------------------------------------------------------------------
-
-@pytest.mark.parametrize("text", [
-    "I don't know",
-    "maybe",
-    "hmm",
-    "",
-    "what do you mean",
-])
-def test_builtin_ambiguous_returns_none(text: str) -> None:
-    s = _BuiltinYesNoSolver()
-    assert s.match_yes_or_no(text, "en-US") is None
-
-
-# ---------------------------------------------------------------------------
-# _BuiltinYesNoSolver — last word wins / double negatives
-# ---------------------------------------------------------------------------
-
-def test_builtin_yes_then_no_returns_no() -> None:
-    s = _BuiltinYesNoSolver()
-    assert s.match_yes_or_no("yes wait no", "en-US") is False
-
-
-def test_builtin_no_then_yes_returns_yes() -> None:
-    s = _BuiltinYesNoSolver()
-    assert s.match_yes_or_no("no actually yes", "en-US") is True
-
-
-def test_builtin_double_negative_not_wrong_is_yes() -> None:
-    s = _BuiltinYesNoSolver()
-    assert s.match_yes_or_no("that's not wrong", "en-US") is True
+def _make_solver(result: bool | None) -> MagicMock:
+    m = MagicMock()
+    m.match_yes_or_no.return_value = result
+    return m
 
 
 # ---------------------------------------------------------------------------
 # set_solver — delegates to custom solver
 # ---------------------------------------------------------------------------
 
-def test_set_solver_used_for_parse() -> None:
-    mock_solver = MagicMock()
-    mock_solver.match_yes_or_no.return_value = True
-    set_solver(mock_solver)
-    result = parse_yes_no("whatever")
-    mock_solver.match_yes_or_no.assert_called_once_with("whatever", "en-US")
-    assert result is True
+def test_set_solver_true() -> None:
+    set_solver(_make_solver(True))
+    assert parse_yes_no("whatever") is True
 
 
 def test_set_solver_false() -> None:
-    mock_solver = MagicMock()
-    mock_solver.match_yes_or_no.return_value = False
-    set_solver(mock_solver)
+    set_solver(_make_solver(False))
     assert parse_yes_no("whatever") is False
 
 
-def test_set_solver_none_neutral() -> None:
-    mock_solver = MagicMock()
-    mock_solver.match_yes_or_no.return_value = None
-    set_solver(mock_solver)
+def test_set_solver_none() -> None:
+    set_solver(_make_solver(None))
     assert parse_yes_no("whatever") is None
 
 
+def test_set_solver_receives_text_and_lang() -> None:
+    mock = _make_solver(True)
+    set_solver(mock)
+    parse_yes_no("oui", lang="fr-FR")
+    mock.match_yes_or_no.assert_called_once_with("oui", "fr-FR")
+
+
 # ---------------------------------------------------------------------------
-# _load_solver — fallback to builtin when no plugins available
+# _load_solver — entry-point discovery
 # ---------------------------------------------------------------------------
 
-def test_load_solver_falls_back_to_builtin(monkeypatch) -> None:
+def _make_ep(name: str, instance: object) -> MagicMock:
+    ep = MagicMock()
+    ep.name = name
+    ep.load.return_value = lambda: instance
+    return ep
+
+
+def test_load_solver_prefers_named_plugin(monkeypatch) -> None:
+    preferred = _make_solver(True)
+    other = _make_solver(False)
+    ep_preferred = _make_ep("ovos-solver-yes-no-plugin", preferred)
+    ep_other = _make_ep("some-other-plugin", other)
+    monkeypatch.setattr(
+        "importlib.metadata.entry_points",
+        lambda group: [ep_other, ep_preferred],
+    )
+    solver = _load_solver("ovos-solver-yes-no-plugin")
+    assert solver is preferred
+
+
+def test_load_solver_falls_back_to_any_plugin(monkeypatch) -> None:
+    fallback = _make_solver(None)
+    ep = _make_ep("other-plugin", fallback)
+    monkeypatch.setattr(
+        "importlib.metadata.entry_points",
+        lambda group: [ep],
+    )
+    solver = _load_solver("missing-plugin")
+    assert solver is fallback
+
+
+def test_load_solver_raises_when_no_plugins(monkeypatch) -> None:
     monkeypatch.setattr(
         "importlib.metadata.entry_points",
         lambda group: [],
     )
-    monkeypatch.setattr(yesno_module, "_import_default_solver", lambda: None)
-    solver = _load_solver()
-    assert isinstance(solver, _BuiltinYesNoSolver)
+    with pytest.raises(RuntimeError, match="opm.agents.yesno"):
+        _load_solver()
 
 
 def test_load_solver_skips_broken_plugin(monkeypatch) -> None:
-    broken_ep = MagicMock()
-    broken_ep.name = "broken-plugin"
-    broken_ep.load.side_effect = ImportError("missing dep")
+    good = _make_solver(True)
+    bad_ep = MagicMock()
+    bad_ep.name = "ovos-solver-yes-no-plugin"
+    bad_ep.load.side_effect = ImportError("missing dep")
+    good_ep = _make_ep("good-plugin", good)
     monkeypatch.setattr(
         "importlib.metadata.entry_points",
-        lambda group: [broken_ep],
+        lambda group: [bad_ep, good_ep],
     )
-    monkeypatch.setattr(yesno_module, "_import_default_solver", lambda: None)
-    solver = _load_solver()
-    assert isinstance(solver, _BuiltinYesNoSolver)
+    solver = _load_solver("ovos-solver-yes-no-plugin")
+    assert solver is good
 
 
 # ---------------------------------------------------------------------------
 # is_agreement / is_disagreement helpers
 # ---------------------------------------------------------------------------
 
-def test_is_agreement_true_on_yes() -> None:
-    set_solver(_BuiltinYesNoSolver())
+def test_is_agreement_true() -> None:
+    set_solver(_make_solver(True))
     assert is_agreement("yes") is True
 
 
 def test_is_agreement_false_on_no() -> None:
-    set_solver(_BuiltinYesNoSolver())
+    set_solver(_make_solver(False))
     assert is_agreement("no") is False
 
 
-def test_is_agreement_default_on_ambiguous() -> None:
-    set_solver(_BuiltinYesNoSolver())
+def test_is_agreement_default_true_on_ambiguous() -> None:
+    set_solver(_make_solver(None))
     assert is_agreement("hmm", default=True) is True
+
+
+def test_is_agreement_default_false_on_ambiguous() -> None:
+    set_solver(_make_solver(None))
     assert is_agreement("hmm", default=False) is False
 
 
 def test_is_disagreement_true_on_no() -> None:
-    set_solver(_BuiltinYesNoSolver())
+    set_solver(_make_solver(False))
     assert is_disagreement("nope") is True
 
 
 def test_is_disagreement_false_on_yes() -> None:
-    set_solver(_BuiltinYesNoSolver())
+    set_solver(_make_solver(True))
     assert is_disagreement("yeah") is False
 
 
-def test_is_disagreement_default_on_ambiguous() -> None:
-    set_solver(_BuiltinYesNoSolver())
+def test_is_disagreement_default_false_on_ambiguous() -> None:
+    set_solver(_make_solver(None))
     assert is_disagreement("whatever", default=False) is False
+
+
+def test_is_disagreement_default_true_on_ambiguous() -> None:
+    set_solver(_make_solver(None))
     assert is_disagreement("whatever", default=True) is True
 
 
 # ---------------------------------------------------------------------------
-# lang forwarding
+# Integration — actual ovos-solver-yes-no-plugin (installed dep)
 # ---------------------------------------------------------------------------
 
-def test_lang_forwarded_to_solver() -> None:
-    mock_solver = MagicMock()
-    mock_solver.match_yes_or_no.return_value = True
-    set_solver(mock_solver)
-    parse_yes_no("oui", lang="fr-FR")
-    mock_solver.match_yes_or_no.assert_called_once_with("oui", "fr-FR")
+def test_integration_yes() -> None:
+    yesno_module._solver = None  # force real plugin load
+    assert parse_yes_no("yes") is True
+
+
+def test_integration_no() -> None:
+    yesno_module._solver = None
+    assert parse_yes_no("nope") is False
+
+
+def test_integration_ambiguous() -> None:
+    yesno_module._solver = None
+    assert parse_yes_no("hmm") is None
+
+
+def test_integration_agree_phrase() -> None:
+    yesno_module._solver = None
+    assert parse_yes_no("I agree") is True
+
+
+def test_integration_disagree_phrase() -> None:
+    yesno_module._solver = None
+    assert parse_yes_no("I disagree") is False
