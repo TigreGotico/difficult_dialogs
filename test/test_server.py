@@ -117,6 +117,17 @@ def test_get_session_returns_state() -> None:
     assert isinstance(data["finished"], bool)
 
 
+def test_get_session_includes_progress() -> None:
+    """GET /sessions/{id} returns progress_covered and progress_total."""
+    session_id = client.post("/sessions", json={"argument_path": COGITO_DIR}).json()["session_id"]
+    data = client.get(f"/sessions/{session_id}").json()
+    assert "progress_covered" in data
+    assert "progress_total" in data
+    assert isinstance(data["progress_covered"], int)
+    assert isinstance(data["progress_total"], int)
+    assert data["progress_total"] > 0
+
+
 def test_get_session_unknown() -> None:
     resp = client.get("/sessions/doesnotexist")
     assert resp.status_code == 404

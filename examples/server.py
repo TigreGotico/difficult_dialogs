@@ -86,6 +86,8 @@ class SessionResponse(BaseModel):
     finished: bool
     current_premise: str | None
     transcript: list[TranscriptEntryModel]
+    progress_covered: int
+    progress_total: int
 
 
 class StatePayload(BaseModel):
@@ -218,6 +220,7 @@ def get_session(session_id: str) -> Any:
         raise HTTPException(status_code=404, detail="Session not found")
 
     state = session.policy.state
+    covered, total = session.policy.progress()
     return SessionResponse(
         session_id=session_id,
         argument=session.policy.argument.name,
@@ -228,6 +231,8 @@ def get_session(session_id: str) -> Any:
             TranscriptEntryModel(role=e.role, text=e.text)
             for e in state.transcript
         ],
+        progress_covered=covered,
+        progress_total=total,
     )
 
 
