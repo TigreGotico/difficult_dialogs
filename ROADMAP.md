@@ -20,16 +20,16 @@
 - [x] `did replay FILE` — step through a saved transcript non-interactively,
       useful for regression tests
 - [x] `did score ARG_DIR` — one-line quality score (no full validate output)
-- [ ] `ArgumentLibrary.watch(callback)` — hot-reload index on filesystem change
+- [x] `ArgumentLibrary.watch(callback)` — hot-reload index on filesystem change
       (requires `watchdog`)
-- [ ] `progress()` in REST server `GET /sessions/{id}` response
+- [x] `progress()` in REST server `GET /sessions/{id}` response
 - [ ] WebSocket endpoint in `examples/server.py` for streaming dialog
 
 ## v0.8 — Multi-language & Solver Ecosystem
 
 - [ ] Solver auto-discovery via `opm.agents.yesno` entry points (scaffolding
       already present in `yesno.py`)
-- [ ] Language routing in `BasePolicy` — pass `lang` through to `parse_yes_no`
+- [x] Language routing in `BasePolicy` — pass `lang` through to `parse_yes_no`
 - [ ] `Premise` i18n: `translations: dict[str, dict[str, str]]` field for
       statement text in multiple locales
 
