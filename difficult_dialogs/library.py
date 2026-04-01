@@ -22,8 +22,10 @@ Usage::
 """
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Callable
 
 from difficult_dialogs.arguments import Argument
 
@@ -239,6 +241,78 @@ class ArgumentLibrary:
         if not self._scanned:
             self.scan()
         return len(self._index)
+
+    def watch(
+        self,
+        callback: "Callable[[ArgumentLibrary], None]",
+        *,
+        poll_interval: float = 2.0,
+    ) -> "threading.Thread":
+        """Watch *root* for filesystem changes and re-scan automatically.
+
+        Uses the ``watchdog`` package when available for efficient inotify-based
+        watching.  Falls back to a polling loop (checks every *poll_interval*
+        seconds) when ``watchdog`` is not installed.
+
+        The *callback* is called with ``self`` after every successful re-scan.
+        It runs in a background daemon thread, so it will not prevent the
+        process from exiting.
+
+        Args:
+            callback: Callable invoked after each re-scan.  Receives this
+                :class:`ArgumentLibrary` instance as its only argument.
+            poll_interval: Seconds between polls in fallback mode (ignored
+                when ``watchdog`` is available).
+
+        Returns:
+            The background :class:`threading.Thread` (already started).
+
+        Example::
+
+            lib = ArgumentLibrary("arguments/").scan()
+
+            def on_change(updated_lib):
+                print(f"Reloaded — {len(updated_lib)} arguments indexed")
+
+            thread = lib.watch(on_change)
+            # thread is a daemon thread; it will stop when your process exits
+        """
+        import threading
+
+        try:
+            from watchdog.observers import Observer  # type: ignore[import]
+            from watchdog.events import FileSystemEventHandler  # type: ignore[import]
+
+            lib_ref = self
+
+            class _Handler(FileSystemEventHandler):
+                def on_any_event(self, event) -> None:  # type: ignore[override]
+                    if event.is_directory:
+                        return
+                    lib_ref.scan(reload=True)
+                    callback(lib_ref)
+
+            observer = Observer()
+            observer.schedule(_Handler(), str(self.root), recursive=True)
+            observer.daemon = True  # type: ignore[attr-defined]
+            observer.start()
+            return observer  # type: ignore[return-value]
+
+        except ImportError:
+            # Fallback: polling thread
+            lib_ref = self
+            stop_event = threading.Event()
+
+            def _poll() -> None:
+                import time
+                while not stop_event.is_set():
+                    time.sleep(poll_interval)
+                    lib_ref.scan(reload=True)
+                    callback(lib_ref)
+
+            thread = threading.Thread(target=_poll, daemon=True)
+            thread.start()
+            return thread
 
     def __repr__(self) -> str:
         n = len(self._index) if self._scanned else "?"

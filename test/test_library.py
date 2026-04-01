@@ -277,3 +277,60 @@ def test_all_arguments_auto_scans(tmp_path: Path) -> None:
     assert not lib._scanned
     lib.all_arguments()
     assert lib._scanned
+
+
+# ---------------------------------------------------------------------------
+# ArgumentLibrary.watch
+# ---------------------------------------------------------------------------
+
+def test_watch_returns_thread(tmp_path: Path) -> None:
+    """watch() returns a started thread-like object."""
+    import threading
+    _make_sample_lib(tmp_path)  # reuse helper from this module
+    lib = ArgumentLibrary(tmp_path).scan()
+    calls: list = []
+    thread = lib.watch(lambda l: calls.append(len(l)), poll_interval=0.05)
+    assert thread is not None
+    # Thread should be alive (daemon)
+    if hasattr(thread, "is_alive"):
+        assert thread.is_alive()
+
+
+def _make_sample_lib(root: Path) -> Path:
+    """Create a minimal argument library structure under root."""
+    cat = root / "test_category" / "test_arg"
+    cat.mkdir(parents=True, exist_ok=True)
+    (cat / "intro.dialog").write_text("Intro.")
+    (cat / "conclusion.conclusion").write_text("Conclusion.")
+    p = cat / "premise_one"
+    p.mkdir()
+    (p / "premise_one.premise").write_text("A statement.")
+    return root
+
+
+def test_watch_fires_callback_on_file_change(tmp_path: Path) -> None:
+    """watch() triggers callback after a file is added to the library root."""
+    import time
+    root = _make_sample_lib(tmp_path)
+    lib = ArgumentLibrary(root).scan()
+    initial_count = len(lib)
+    fired: list[int] = []
+
+    lib.watch(lambda l: fired.append(len(l)), poll_interval=0.05)
+
+    # Add a new argument directory
+    new_arg = root / "test_category" / "second_arg"
+    new_arg.mkdir(parents=True, exist_ok=True)
+    (new_arg / "intro.dialog").write_text("Second intro.")
+    (new_arg / "conclusion.conclusion").write_text("Second conclusion.")
+    p2 = new_arg / "premise_a"
+    p2.mkdir()
+    (p2 / "premise_a.premise").write_text("Second statement.")
+
+    # Wait up to 1 s for the callback to fire
+    deadline = time.monotonic() + 1.0
+    while not fired and time.monotonic() < deadline:
+        time.sleep(0.05)
+
+    assert fired, "watch() callback was never called after file change"
+    assert fired[-1] > initial_count
