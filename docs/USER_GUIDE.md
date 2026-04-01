@@ -532,6 +532,58 @@ async def on_message(message):
 bot.run('YOUR_DISCORD_TOKEN')
 ```
 
+#### Async / Streaming Integration
+
+`BasePolicy.stream()` is an async generator that accepts an
+`AsyncGenerator[str, None]` of user messages and yields bot responses one by
+one.  Use it when your framework is already async (FastAPI WebSocket, aiohttp,
+Discord.py, etc.) and you don't want to run a synchronous `input()` loop.
+
+```python
+import asyncio
+from difficult_dialogs import Argument, get_policy
+
+arg = Argument.from_directory("examples/i_think_therefore_i_am")
+policy = get_policy("socratic", arg)
+
+async def user_input_stream():
+    """Yield pre-scripted turns — replace with real input in production."""
+    for turn in ["I think so", "not sure", "yes"]:
+        yield turn
+
+async def main():
+    print("BOT:", policy.start())
+    async for response in policy.stream(user_input_stream()):
+        if response:
+            print("BOT:", response)
+
+asyncio.run(main())
+```
+
+`stream()` handles its own `start()` / `end()` bookkeeping: it yields the
+intro before the first user message and the conclusion once
+`policy.state.finished` is set.
+
+**Session persistence with async**: save state between requests using
+`policy.save_state(path)` / `policy.load_state(path)` (`BasePolicy` —
+`policy.py`):
+
+```python
+# Request 1
+policy = get_policy("knowitall", arg)
+policy.start()
+await do_one_turn(policy)
+policy.save_state("/tmp/session_42.json")
+
+# Request 2 (new process / worker)
+policy2 = get_policy("knowitall", arg)
+policy2.load_state("/tmp/session_42.json")
+await do_one_turn(policy2)
+```
+
+For key-value stores (Redis, DynamoDB): use `policy.state.to_dict()` and
+`policy.restore_state(d)` directly.
+
 ---
 
 ## Advanced Features
