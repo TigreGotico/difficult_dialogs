@@ -284,16 +284,27 @@ def test_all_arguments_auto_scans(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 def test_watch_returns_thread(tmp_path: Path) -> None:
-    """watch() returns a started thread-like object."""
-    import threading
+    """watch() returns a started observer when watchdog is available."""
     _make_sample_lib(tmp_path)  # reuse helper from this module
     lib = ArgumentLibrary(tmp_path).scan()
     calls: list = []
-    thread = lib.watch(lambda l: calls.append(len(l)), poll_interval=0.05)
-    assert thread is not None
-    # Thread should be alive (daemon)
-    if hasattr(thread, "is_alive"):
-        assert thread.is_alive()
+    observer = lib.watch(lambda l: calls.append(len(l)))
+    assert observer is not None
+    # Observer should be alive (daemon)
+    if hasattr(observer, "is_alive"):
+        assert observer.is_alive()
+
+
+def test_watch_raises_import_error_without_watchdog(tmp_path: Path) -> None:
+    """watch() raises ImportError with a helpful message when watchdog is absent."""
+    import sys
+    import unittest.mock as mock
+    _make_sample_lib(tmp_path)
+    lib = ArgumentLibrary(tmp_path).scan()
+    # Simulate watchdog not being installed
+    with mock.patch.dict(sys.modules, {"watchdog": None, "watchdog.observers": None, "watchdog.events": None}):
+        with pytest.raises(ImportError, match="watchdog"):
+            lib.watch(lambda l: None)
 
 
 def _make_sample_lib(root: Path) -> Path:
@@ -316,7 +327,7 @@ def test_watch_fires_callback_on_file_change(tmp_path: Path) -> None:
     initial_count = len(lib)
     fired: list[int] = []
 
-    lib.watch(lambda l: fired.append(len(l)), poll_interval=0.05)
+    lib.watch(lambda l: fired.append(len(l)))
 
     # Add a new argument directory
     new_arg = root / "test_category" / "second_arg"
