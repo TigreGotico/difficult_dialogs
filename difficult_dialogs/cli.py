@@ -330,6 +330,62 @@ def cmd_serve(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_new(args: argparse.Namespace) -> int:
+    """Interactive wizard to create a new argument without an LLM."""
+    from difficult_dialogs.builder import ArgumentBuilder
+
+    print("=== New Argument Wizard ===")
+    print("Press Ctrl+C at any time to abort.\n")
+
+    try:
+        name = input("Argument name (e.g. 'exercise improves mental health'): ").strip()
+        if not name:
+            print("❌ Name is required.")
+            return 1
+
+        intro = input("Opening statement / intro: ").strip()
+        conclusion = input("Conclusion (what you want the user to accept): ").strip()
+
+        builder = ArgumentBuilder(name=name, intro=intro, conclusion=conclusion)
+
+        print("\nNow add premises. Each premise is one key reason that supports your conclusion.")
+        print("Enter an empty premise name to finish.\n")
+
+        premise_idx = 1
+        while True:
+            pname = input(f"  Premise {premise_idx} name (or ENTER to finish): ").strip()
+            if not pname:
+                break
+
+            pb = builder.premise(pname)
+
+            print(f"  Add supporting statements for '{pname}'. Empty line to move on.")
+            stmt_idx = 1
+            while True:
+                stmt = input(f"    Statement {stmt_idx}: ").strip()
+                if not stmt:
+                    break
+                pb.statement(stmt)
+                stmt_idx += 1
+
+            premise_idx += 1
+
+        if premise_idx == 1:
+            print("⚠  No premises added — argument will have only intro and conclusion.")
+
+        arg = builder.build()
+        out_dir = Path(args.output) / name.lower().replace(" ", "_").replace("'", "")[:60]
+        arg.save(out_dir)
+        print(f"\n✓ Argument saved to {out_dir}")
+        print(f"  Debate it with: dd debate {out_dir}")
+
+    except KeyboardInterrupt:
+        print("\nAborted.")
+        return 1
+
+    return 0
+
+
 def main() -> int:
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
@@ -480,6 +536,20 @@ def main() -> int:
     )
     deb_parser.set_defaults(func=cmd_debate)
     
+    # New command
+    new_parser = subparsers.add_parser(
+        "new",
+        aliases=["create", "n"],
+        help="Create a new argument interactively (no LLM required)",
+    )
+    new_parser.add_argument(
+        "-o", "--output",
+        default=".",
+        metavar="DIR",
+        help="Directory to save the argument in (default: current dir)",
+    )
+    new_parser.set_defaults(func=cmd_new)
+
     # List command
     list_parser = subparsers.add_parser(
         "list",
