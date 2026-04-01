@@ -171,8 +171,10 @@ class Premise:
         extensions are silently ignored.
 
         Args:
-            file: Path to a plain-text premise data file whose extension
-                  determines the target field (e.g. ``.premise``, ``.why``).
+            file: Path to a premise data file whose extension determines the
+                  target field (e.g. ``.premise``, ``.why``).  Files named
+                  ``<name>.translations.json`` are loaded as bulk i18n
+                  translations (format: ``{lang: {field: [lines]}}``).
         """
         content = file.read_text()
         lines = [ln.strip() for ln in content.strip().split("\n") if ln.strip()]
@@ -188,6 +190,27 @@ class Premise:
             ".where":   self.add_where,
             ".who":     self.add_who,
         }
+
+        # .translations.json — bulk i18n translations for all fields and languages.
+        # Format: {"<lang>": {"<field>": ["line1", "line2", …], …}, …}
+        # The filename must match <stem>.translations.json where stem matches
+        # the premise name (case-insensitive) — or any .translations.json file
+        # inside the premise directory.
+        if file.name.endswith(".translations.json"):
+            import json as _json
+            try:
+                data: dict[str, dict[str, list[str]]] = _json.loads(content)
+            except _json.JSONDecodeError:
+                return  # silently ignore malformed JSON
+            for lang, fields in data.items():
+                for field_name, texts in fields.items():
+                    if isinstance(texts, list):
+                        for text in texts:
+                            self.add_translation(lang, field_name, str(text))
+                    else:
+                        # Allow a plain string as shorthand for a single entry
+                        self.add_translation(lang, field_name, str(texts))
+            return
 
         # .choices — multi-choice options; parse whole file at once
         if file.suffix == ".choices":

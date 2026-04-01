@@ -342,3 +342,49 @@ class TestPremiseTranslations:
         p.apply_file(f)
         assert len(p.statements) == 1
         assert not p.translations
+
+    def test_apply_file_translations_json(self, tmp_path) -> None:
+        """apply_file loads bulk i18n translations from a .translations.json file."""
+        import json
+        from difficult_dialogs.premises import Premise
+
+        data = {
+            "pt-br": {
+                "statements": ["Computadores processam informação."],
+                "why": ["Porque é verdade."],
+            },
+            "es-ES": {
+                "statements": ["Los ordenadores procesan información."],
+            },
+        }
+        f = tmp_path / "my_premise.translations.json"
+        f.write_text(json.dumps(data))
+        p = Premise(name="my_premise")
+        p.apply_file(f)
+        assert "pt-br" in p.translations
+        assert "Computadores processam informação." in p.translations["pt-br"]["statements"]
+        assert "Porque é verdade." in p.translations["pt-br"]["why"]
+        assert "es-ES" in p.translations
+        assert "Los ordenadores procesan información." in p.translations["es-ES"]["statements"]
+
+    def test_apply_file_translations_json_string_shorthand(self, tmp_path) -> None:
+        """apply_file accepts a plain string value (shorthand for single entry)."""
+        import json
+        from difficult_dialogs.premises import Premise
+
+        data = {"fr": {"statements": "Un seul énoncé."}}
+        f = tmp_path / "p.translations.json"
+        f.write_text(json.dumps(data))
+        p = Premise(name="p")
+        p.apply_file(f)
+        assert "Un seul énoncé." in p.translations["fr"]["statements"]
+
+    def test_apply_file_translations_json_malformed_ignored(self, tmp_path) -> None:
+        """apply_file silently ignores a malformed .translations.json file."""
+        from difficult_dialogs.premises import Premise
+
+        f = tmp_path / "p.translations.json"
+        f.write_text("not valid json{{")
+        p = Premise(name="p")
+        p.apply_file(f)  # must not raise
+        assert not p.translations
