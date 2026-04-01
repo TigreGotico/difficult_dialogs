@@ -99,13 +99,18 @@ class BasePolicy(ABC):
         state: Current dialog state.
     """
     
-    def __init__(self, argument: Argument) -> None:
+    def __init__(self, argument: Argument, lang: str = "en-US") -> None:
         """Initialize policy with an argument.
-        
+
         Args:
             argument: Argument instance to present.
+            lang: BCP-47 language code used for yes/no intent detection
+                (e.g. ``"en-US"``, ``"es-ES"``, ``"pt-BR"``).  Passed
+                through to :func:`~difficult_dialogs.yesno.parse_yes_no`
+                on every user turn so non-English solvers work correctly.
         """
         self.argument = argument
+        self.lang = lang
         self.state = PolicyState()
         self._output_queue: list[str] = []
     
@@ -404,13 +409,14 @@ class KnowItAllPolicy(BasePolicy):
     evidence and sources when they disagree with a statement.
     """
     
-    def __init__(self, argument: Argument) -> None:
+    def __init__(self, argument: Argument, lang: str = "en-US") -> None:
         """Initialize policy.
-        
+
         Args:
             argument: Argument to present.
+            lang: BCP-47 language code for yes/no intent detection.
         """
-        super().__init__(argument)
+        super().__init__(argument, lang=lang)
         self._pending_response: str | None = None
     
     def handle_input(self, user_input: str) -> str | None:
@@ -435,7 +441,7 @@ class KnowItAllPolicy(BasePolicy):
             return five_w
 
         # Handle agreement/disagreement
-        if is_disagreement(user_input):
+        if is_disagreement(user_input, lang=self.lang):
             self.disagree()
             return self._handle_disagreement()
 
@@ -532,13 +538,14 @@ class SocraticPolicy(BasePolicy):
         "How would you respond to someone who disagrees?",
     ]
     
-    def __init__(self, argument: Argument) -> None:
+    def __init__(self, argument: Argument, lang: str = "en-US") -> None:
         """Initialize policy.
-        
+
         Args:
             argument: Argument to present.
+            lang: BCP-47 language code for yes/no intent detection.
         """
-        super().__init__(argument)
+        super().__init__(argument, lang=lang)
         self._last_question: str | None = None
     
     def handle_input(self, user_input: str) -> str | None:
@@ -560,7 +567,7 @@ class SocraticPolicy(BasePolicy):
             return five_w
 
         # Handle agreement/disagreement
-        _intent = parse_yes_no(user_input)
+        _intent = parse_yes_no(user_input, lang=self.lang)
 
         if _intent is False:
             self.disagree()
@@ -623,13 +630,14 @@ class DebatePolicy(BasePolicy):
         "That's a common objection, yet: ",
     ]
     
-    def __init__(self, argument: Argument) -> None:
+    def __init__(self, argument: Argument, lang: str = "en-US") -> None:
         """Initialize policy.
-        
+
         Args:
             argument: Argument to present.
+            lang: BCP-47 language code for yes/no intent detection.
         """
-        super().__init__(argument)
+        super().__init__(argument, lang=lang)
 
     def handle_input(self, user_input: str) -> str | None:
         """Process user input with debate-style responses.
@@ -649,7 +657,7 @@ class DebatePolicy(BasePolicy):
             return five_w
 
         # Handle agreement
-        if is_disagreement(user_input):
+        if is_disagreement(user_input, lang=self.lang):
             self.disagree()
             return self._challenge()
 
@@ -718,13 +726,14 @@ class ExploratoryPolicy(BasePolicy):
         "This deserves careful consideration.",
     ]
     
-    def __init__(self, argument: Argument) -> None:
+    def __init__(self, argument: Argument, lang: str = "en-US") -> None:
         """Initialize policy.
-        
+
         Args:
             argument: Argument to present.
+            lang: BCP-47 language code for yes/no intent detection.
         """
-        super().__init__(argument)
+        super().__init__(argument, lang=lang)
     
     def handle_input(self, user_input: str) -> str | None:
         """Process user input with neutral exploration.
@@ -744,7 +753,7 @@ class ExploratoryPolicy(BasePolicy):
         if five_w:
             return five_w
 
-        if is_disagreement(user_input):
+        if is_disagreement(user_input, lang=self.lang):
             self.disagree()
             acknowledgment = random.choice(self.NEUTRAL_ACKNOWLEDGMENTS)
 
@@ -802,8 +811,8 @@ class MaieuticPolicy(BasePolicy):
         "What additional information would change your mind?",
     ]
 
-    def __init__(self, argument: Argument) -> None:
-        super().__init__(argument)
+    def __init__(self, argument: Argument, lang: str = "en-US") -> None:
+        super().__init__(argument, lang=lang)
         self.question_count: int = 0
 
     def handle_input(self, user_input: str) -> str | None:
@@ -814,7 +823,7 @@ class MaieuticPolicy(BasePolicy):
         if five_w:
             return five_w
 
-        _intent = parse_yes_no(user_lower)
+        _intent = parse_yes_no(user_lower, lang=self.lang)
 
         if _intent is False:
             templates = self.DISAGREEMENT_QUESTIONS
@@ -885,7 +894,7 @@ class SkepticPolicy(BasePolicy):
         if five_w:
             return five_w
 
-        _intent = parse_yes_no(user_lower)
+        _intent = parse_yes_no(user_lower, lang=self.lang)
 
         if _intent is True:
             # After a challenge, advance to next premise statement
@@ -933,8 +942,8 @@ class TeacherPolicy(BasePolicy):
         "What this means is: ",
     ]
 
-    def __init__(self, argument: Argument) -> None:
-        super().__init__(argument)
+    def __init__(self, argument: Argument, lang: str = "en-US") -> None:
+        super().__init__(argument, lang=lang)
         self.explaining = False
 
     def handle_input(self, user_input: str) -> str | None:
@@ -948,7 +957,7 @@ class TeacherPolicy(BasePolicy):
         if '?' in user_input:
             return random.choice(self.TRANSITION_PHRASES) + " " + self._get_explanation()
 
-        _intent = parse_yes_no(user_lower)
+        _intent = parse_yes_no(user_lower, lang=self.lang)
 
         if _intent is True:
             # Consume and advance to next statement with reinforcement framing
@@ -1015,8 +1024,8 @@ class DebaterPolicy(BasePolicy):
         "Expert consensus contradicts your claim.",
     ]
 
-    def __init__(self, argument: Argument) -> None:
-        super().__init__(argument)
+    def __init__(self, argument: Argument, lang: str = "en-US") -> None:
+        super().__init__(argument, lang=lang)
         self.points_made: int = 0
 
     def handle_input(self, user_input: str) -> str | None:
@@ -1035,7 +1044,7 @@ class DebaterPolicy(BasePolicy):
                 return f"{attack} {counter}"
             return attack
 
-        _intent = parse_yes_no(user_lower)
+        _intent = parse_yes_no(user_lower, lang=self.lang)
 
         if _intent is True:
             return random.choice(self.DEFENSE_PHRASES)
@@ -1071,7 +1080,7 @@ class MinimalistPolicy(BasePolicy):
         if five_w:
             return five_w[:100] + ("..." if len(five_w) > 100 else "")
 
-        _intent = parse_yes_no(user_lower)
+        _intent = parse_yes_no(user_lower, lang=self.lang)
 
         if _intent is True:
             return random.choice(self.BRIEF_AGREE)
@@ -1110,6 +1119,7 @@ class AdaptivePolicy(BasePolicy):
         initial_policy: type[BasePolicy] = KnowItAllPolicy,
         fallback_policy: type[BasePolicy] = ExploratoryPolicy,
         switch_threshold: int = 3,
+        lang: str = "en-US",
     ) -> None:
         """Initialise AdaptivePolicy.
 
@@ -1118,14 +1128,15 @@ class AdaptivePolicy(BasePolicy):
             initial_policy: Policy class to start with.
             fallback_policy: Policy class to switch to after threshold reached.
             switch_threshold: Number of consecutive disagreements before switching.
+            lang: BCP-47 language code forwarded to yes/no intent detection.
         """
-        super().__init__(argument)
+        super().__init__(argument, lang=lang)
         self._initial_cls = initial_policy
         self._fallback_cls = fallback_policy
         self.switch_threshold = switch_threshold
         self._consecutive_disagree: int = 0
         self._switched: bool = False
-        self._active: BasePolicy = initial_policy(argument)
+        self._active: BasePolicy = initial_policy(argument, lang=lang)
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -1155,13 +1166,13 @@ class AdaptivePolicy(BasePolicy):
         """Track disagreement count and switch policy when threshold hit."""
         if self._switched:
             return
-        if is_disagreement(user_input):
+        if is_disagreement(user_input, lang=self.lang):
             self._consecutive_disagree += 1
         else:
             self._consecutive_disagree = 0
 
         if self._consecutive_disagree >= self.switch_threshold:
-            new_policy = self._fallback_cls(self.argument)
+            new_policy = self._fallback_cls(self.argument, lang=self.lang)
             self._sync_state()
             new_policy.state = self._active.state
             self._active = new_policy
@@ -1199,7 +1210,7 @@ class AdaptivePolicy(BasePolicy):
     def start(self) -> str:
         """Start dialog, initialise active policy."""
         intro = super().start()
-        self._active = self._initial_cls(self.argument)
+        self._active = self._initial_cls(self.argument, lang=self.lang)
         self._sync_state()
         self._consecutive_disagree = 0
         self._switched = False
@@ -1251,12 +1262,13 @@ class WebhookPolicy(BasePolicy):
         webhook_url: str,
         fallback_policy: type[BasePolicy] = KnowItAllPolicy,
         timeout: float = 10.0,
+        lang: str = "en-US",
     ) -> None:
         import urllib.request as _urllib
-        super().__init__(argument)
+        super().__init__(argument, lang=lang)
         self.webhook_url = webhook_url
         self.timeout = timeout
-        self._fallback = fallback_policy(argument)
+        self._fallback = fallback_policy(argument, lang=lang)
         self._urllib = _urllib
 
     def _sync_fallback_state(self) -> None:
@@ -1336,8 +1348,9 @@ class LLMEnhancedPolicy(BasePolicy):
         inner_policy: BasePolicy,
         enhancer: object,  # LLMEnhancer — imported lazily to keep core offline
         style: str = "conversational",
+        lang: str = "en-US",
     ) -> None:
-        super().__init__(argument)
+        super().__init__(argument, lang=lang)
         self._inner = inner_policy
         self._enhancer = enhancer
         self._style = style
@@ -1430,7 +1443,7 @@ class MultiArgumentPolicy(BasePolicy):
 
         self._sequence: list[tuple[Argument, type[BasePolicy]]] = normalised
         self._index: int = 0
-        self._inner: BasePolicy = normalised[0][1](normalised[0][0])
+        self._inner: BasePolicy = normalised[0][1](normalised[0][0], lang=self.lang)
 
     # ------------------------------------------------------------------ #
     # navigation helpers
@@ -1441,7 +1454,7 @@ class MultiArgumentPolicy(BasePolicy):
         self._index += 1
         if self._index < len(self._sequence):
             arg, cls = self._sequence[self._index]
-            self._inner = cls(arg)
+            self._inner = cls(arg, lang=self.lang)
             self._inner.start()
 
     @property

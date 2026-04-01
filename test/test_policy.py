@@ -917,3 +917,46 @@ def test_adaptive_set_policy_active_policy_property() -> None:
     new = TeacherPolicy(arg)
     policy.set_policy(new)
     assert policy.active_policy is new
+
+
+# ---------------------------------------------------------------------------
+# lang parameter threading
+# ---------------------------------------------------------------------------
+
+def test_lang_stored_on_policy() -> None:
+    """lang kwarg is stored on BasePolicy and defaults to en-US."""
+    policy = KnowItAllPolicy(make_arg())
+    assert policy.lang == "en-US"
+
+
+def test_lang_custom_value_propagates() -> None:
+    """Explicit lang value is stored."""
+    policy = KnowItAllPolicy(make_arg(), lang="es-ES")
+    assert policy.lang == "es-ES"
+
+
+def test_adaptive_lang_propagates_to_delegate() -> None:
+    """AdaptivePolicy passes lang to initial delegate on start()."""
+    from difficult_dialogs.policy import AdaptivePolicy
+    arg = make_arg()
+    policy = AdaptivePolicy(arg, lang="pt-BR")
+    policy.start()
+    assert policy.active_policy.lang == "pt-BR"
+
+
+def test_lang_passed_to_parse_yes_no(monkeypatch) -> None:
+    """handle_input passes policy.lang to parse_yes_no."""
+    import difficult_dialogs.yesno as yesno_module
+    captured: list[str] = []
+    original = yesno_module.parse_yes_no
+
+    def spy(text: str, lang: str = "en-US") -> object:
+        captured.append(lang)
+        return original(text, lang)
+
+    monkeypatch.setattr(yesno_module, "parse_yes_no", spy)
+
+    policy = KnowItAllPolicy(make_arg(), lang="fr-FR")
+    policy.start()
+    policy.respond("oui")
+    assert "fr-FR" in captured
