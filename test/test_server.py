@@ -208,3 +208,40 @@ def test_get_state_unknown_session() -> None:
 def test_put_state_unknown_session() -> None:
     resp = client.put("/sessions/ghost/state", json={})
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# WebSocket /sessions/{id}/ws
+# ---------------------------------------------------------------------------
+
+def test_ws_unknown_session_closes() -> None:
+    """WebSocket to unknown session is rejected with a close code."""
+    from starlette.websockets import WebSocketDisconnect
+    with pytest.raises(WebSocketDisconnect):
+        with client.websocket_connect("/sessions/ghost/ws") as ws:
+            pass
+
+
+def test_ws_sends_intro_on_connect() -> None:
+    """WebSocket sends intro JSON immediately after connect."""
+    import json
+    session_id = client.post("/sessions", json={"argument_path": COGITO_DIR}).json()["session_id"]
+    with client.websocket_connect(f"/sessions/{session_id}/ws") as ws:
+        msg = json.loads(ws.receive_text())
+        assert "response" in msg
+        assert "finished" in msg
+        assert "progress_covered" in msg
+        assert "progress_total" in msg
+        assert msg["progress_total"] > 0
+
+
+def test_ws_full_turn() -> None:
+    """WebSocket round-trip: send a turn, receive a response."""
+    import json
+    session_id = client.post("/sessions", json={"argument_path": COGITO_DIR}).json()["session_id"]
+    with client.websocket_connect(f"/sessions/{session_id}/ws") as ws:
+        ws.receive_text()  # consume intro
+        ws.send_text("yes")
+        reply = json.loads(ws.receive_text())
+        assert "response" in reply
+        assert isinstance(reply["finished"], bool)

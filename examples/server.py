@@ -41,7 +41,7 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from fastapi import FastAPI, HTTPException
+    from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
     from pydantic import BaseModel
 except ImportError as exc:  # pragma: no cover
     raise ImportError(
@@ -320,6 +320,63 @@ def list_arguments(args_dir: str = "examples/sample_arguments") -> Any:
             result[category_dir.name] = names
 
     return result
+
+
+@app.websocket("/sessions/{session_id}/ws")
+async def debate_ws(session_id: str, websocket: WebSocket) -> None:
+    """Stream a debate session over WebSocket.
+
+    **Protocol**
+
+    1. Server sends the intro immediately on connect.
+    2. Client sends UTF-8 text messages (user turns).
+    3. Server replies with a JSON object::
+
+           {"response": "...", "finished": false, "progress_covered": 1, "progress_total": 3}
+
+    4. When ``finished`` is ``true`` the server closes the connection.
+
+    **Error handling**
+
+    * Connecting to an unknown session yields a 1008 close code.
+    * If the client disconnects mid-session the server cleans up silently.
+
+    Args:
+        session_id: ID returned by ``POST /sessions``.
+        websocket: Injected by FastAPI.
+    """
+    import json
+
+    session = _sessions.get(session_id)
+    if session is None:
+        await websocket.close(code=1008, reason="Session not found")
+        return
+
+    await websocket.accept()
+
+    # Send intro
+    intro = session.policy.state.transcript[0].text if session.policy.state.transcript else ""
+    covered, total = session.policy.progress()
+    await websocket.send_text(json.dumps({
+        "response": intro,
+        "finished": session.policy.state.finished,
+        "progress_covered": covered,
+        "progress_total": total,
+    }))
+
+    try:
+        while not session.policy.state.finished:
+            user_text = await websocket.receive_text()
+            response = session.policy.respond(user_text)
+            covered, total = session.policy.progress()
+            await websocket.send_text(json.dumps({
+                "response": response,
+                "finished": session.policy.state.finished,
+                "progress_covered": covered,
+                "progress_total": total,
+            }))
+    except WebSocketDisconnect:
+        pass
 
 
 if __name__ == "__main__":
