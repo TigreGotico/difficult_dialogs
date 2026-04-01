@@ -270,10 +270,9 @@ class TestSkepticPolicyBranches:
         assert any(phrase.rstrip() in response for phrase in SkepticPolicy.COUNTER_PHRASES)
 
     def test_default_skepticism(self, sample_argument: Argument) -> None:
-        """Ambiguous / agreement input returns a CHALLENGE_PHRASES response."""
+        """Agreement input triggers a CHALLENGE_PHRASES response."""
         policy = SkepticPolicy(sample_argument)
-        # "perhaps" is parsed as agreement (default=True) → triggers challenge
-        response = policy.handle_input("perhaps")
+        response = policy.handle_input("yes")
         assert response in SkepticPolicy.CHALLENGE_PHRASES
 
     def test_five_w_bypasses_challenge(self, sample_argument: Argument) -> None:
@@ -432,7 +431,7 @@ class TestMinimalistPolicyBranches:
         policy = MinimalistPolicy(arg)
         policy.state.spoken_statements.add("s1")
         policy.state.spoken_premises.add("p1")
-        response = policy.handle_input("hmm")
+        response = policy.handle_input("yes")
         assert response in MinimalistPolicy.BRIEF_AGREE
 
     def test_five_w_truncated_in_minimalist(self, sample_argument: Argument) -> None:
@@ -617,3 +616,397 @@ class TestWebhookPolicy:
             fallback_policy=SilentPolicy,
         )
         assert isinstance(policy._fallback, SilentPolicy)
+
+
+# ---------------------------------------------------------------------------
+# Coverage gap: _peek_next_statement with active current_premise
+# ---------------------------------------------------------------------------
+
+class TestPeekNextStatementCurrentPremise:
+    def test_peek_with_current_premise(self, sample_argument: Argument) -> None:
+        """_peek_next_statement returns current premise's next statement."""
+        from difficult_dialogs.policy import KnowItAllPolicy
+        policy = KnowItAllPolicy(sample_argument)
+        policy.start()
+        # Advance to first premise statement
+        policy._get_next_statement()
+        # Now set current_premise so peek uses that branch
+        policy.state.current_premise = "premise_one"
+        # Peek does not advance spoken_statements
+        before = set(policy.state.spoken_statements)
+        result = policy._peek_next_statement()
+        after = set(policy.state.spoken_statements)
+        assert result is not None
+        assert before == after  # no state change
+
+
+# ---------------------------------------------------------------------------
+# Coverage gap: run_sync break path (generator exhausted)
+# ---------------------------------------------------------------------------
+
+class TestRunSync:
+    def test_run_sync_drives_full_dialog(self, sample_argument: Argument) -> None:
+        """run_sync yields responses and terminates."""
+        from difficult_dialogs.policy import SilentPolicy
+        policy = SilentPolicy(sample_argument)
+        gen = policy.run_sync()
+        # consume all turns — generator must terminate
+        responses = []
+        try:
+            resp = next(gen)
+            while resp:
+                responses.append(resp)
+                resp = gen.send("yes")
+        except StopIteration:
+            pass
+        assert len(responses) >= 1
+
+
+# ---------------------------------------------------------------------------
+# Coverage gap: Socratic neutral fallback to _ask_question
+# ---------------------------------------------------------------------------
+
+class TestSocraticNeutral:
+    def test_neutral_input_asks_question(self, sample_argument: Argument) -> None:
+        """Neutral input (neither agree/disagree) returns a clarifying question."""
+        from difficult_dialogs.policy import SocraticPolicy
+        policy = SocraticPolicy(sample_argument)
+        policy.start()
+        result = policy.handle_input("maybe, I'm not sure")
+        assert result is not None
+        assert len(result) > 0
+
+
+# ---------------------------------------------------------------------------
+# Coverage gap: MaieuticPolicy neutral paths
+# ---------------------------------------------------------------------------
+
+class TestMaieuticNeutral:
+    """Tests for the neutral (parse_yes_no returns None) path in MaieuticPolicy."""
+
+    @staticmethod
+    def _null_solver():
+        from unittest.mock import MagicMock
+        m = MagicMock()
+        m.match_yes_or_no.return_value = None
+        return m
+
+    def test_neutral_first_turn_gives_intro_question(self, sample_argument: Argument) -> None:
+        """First neutral turn returns the intro question template."""
+        import difficult_dialogs.yesno as yesno_module
+        from difficult_dialogs.policy import MaieuticPolicy
+        policy = MaieuticPolicy(sample_argument)
+        policy.start()
+        policy.question_count = 0
+        old = yesno_module._solver
+        try:
+            yesno_module._solver = self._null_solver()
+            result = policy.handle_input("hmm, interesting")
+        finally:
+            yesno_module._solver = old
+        assert result is not None
+        assert policy.question_count == 1
+
+    def test_neutral_subsequent_turn_gives_statement(self, sample_argument: Argument) -> None:
+        """Subsequent neutral turn presents next statement."""
+        import difficult_dialogs.yesno as yesno_module
+        from difficult_dialogs.policy import MaieuticPolicy
+        policy = MaieuticPolicy(sample_argument)
+        policy.start()
+        policy.question_count = 1  # already asked intro
+        old = yesno_module._solver
+        try:
+            yesno_module._solver = self._null_solver()
+            result = policy.handle_input("hmm, interesting")
+        finally:
+            yesno_module._solver = old
+        assert result is not None
+        assert policy.question_count == 0  # reset after statement
+
+    def test_neutral_exhausted_returns_conclusion(self, sample_argument: Argument) -> None:
+        """Neutral turn when statements exhausted returns conclusion."""
+        import difficult_dialogs.yesno as yesno_module
+        from difficult_dialogs.policy import MaieuticPolicy
+        policy = MaieuticPolicy(sample_argument)
+        policy.start()
+        while policy._get_next_statement():
+            pass
+        policy.question_count = 1
+        old = yesno_module._solver
+        try:
+            yesno_module._solver = self._null_solver()
+            result = policy.handle_input("hmm")
+        finally:
+            yesno_module._solver = old
+        assert result == str(sample_argument.conclusion)
+        assert policy.state.finished is True
+
+
+# ---------------------------------------------------------------------------
+# Coverage gap: SkepticPolicy disagreement exhaustion
+# ---------------------------------------------------------------------------
+
+class TestSkepticDisagreementExhausted:
+    def test_disagree_exhausted_returns_conclusion(self, sample_argument: Argument) -> None:
+        """SkepticPolicy returns conclusion when no statements left on disagreement."""
+        from difficult_dialogs.policy import SkepticPolicy
+        policy = SkepticPolicy(sample_argument)
+        policy.start()
+        while policy._get_next_statement():
+            pass
+        result = policy.handle_input("nope")
+        assert result == str(sample_argument.conclusion)
+        assert policy.state.finished is True
+
+
+# ---------------------------------------------------------------------------
+# Coverage gap: TeacherPolicy _clarify_misconception fallback
+# ---------------------------------------------------------------------------
+
+class TestTeacherClarifyFallback:
+    def test_clarify_fallback_when_exhausted(self, sample_argument: Argument) -> None:
+        """_clarify_misconception returns rephrase fallback when exhausted."""
+        from difficult_dialogs.policy import TeacherPolicy
+        policy = TeacherPolicy(sample_argument)
+        policy.start()
+        while policy._get_next_statement():
+            pass
+        result = policy._clarify_misconception()
+        assert result == "Let me rephrase that more clearly."
+
+    def test_get_explanation_fallback_when_exhausted(self, sample_argument: Argument) -> None:
+        """_get_explanation returns conclusion text when no statements remain."""
+        from difficult_dialogs.policy import TeacherPolicy
+        policy = TeacherPolicy(sample_argument)
+        policy.start()
+        while policy._get_next_statement():
+            pass
+        result = policy._get_explanation()
+        assert result == sample_argument.conclusion
+
+    def test_teach_with_example_exhausted_finishes(self, sample_argument: Argument) -> None:
+        """_teach_with_example marks finished and returns conclusion when exhausted."""
+        from difficult_dialogs.policy import TeacherPolicy
+        policy = TeacherPolicy(sample_argument)
+        policy.start()
+        while policy._get_next_statement():
+            pass
+        result = policy._teach_with_example()
+        assert result == sample_argument.conclusion
+        assert policy.state.finished is True
+
+
+# ---------------------------------------------------------------------------
+# Coverage gap: DebaterPolicy / MinimalistPolicy default fallthrough
+# ---------------------------------------------------------------------------
+
+class TestDebaterDefaultFallthrough:
+    @staticmethod
+    def _null_solver():
+        from unittest.mock import MagicMock
+        m = MagicMock()
+        m.match_yes_or_no.return_value = None
+        return m
+
+    def test_neutral_input_advances_to_next_statement(self, sample_argument: Argument) -> None:
+        """Neutral input (parse_yes_no=None) falls through to next statement."""
+        import difficult_dialogs.yesno as yesno_module
+        policy = DebaterPolicy(sample_argument)
+        policy.start()
+        old = yesno_module._solver
+        try:
+            yesno_module._solver = self._null_solver()
+            result = policy.handle_input("hmm")
+        finally:
+            yesno_module._solver = old
+        assert result is not None
+
+    def test_neutral_exhausted_returns_conclusion(self, sample_argument: Argument) -> None:
+        """Neutral (parse_yes_no=None) with no statements returns conclusion."""
+        import difficult_dialogs.yesno as yesno_module
+        policy = DebaterPolicy(sample_argument)
+        policy.start()
+        while policy._get_next_statement():
+            pass
+        old = yesno_module._solver
+        try:
+            yesno_module._solver = self._null_solver()
+            result = policy.handle_input("hmm")
+        finally:
+            yesno_module._solver = old
+        assert result == sample_argument.conclusion
+
+
+class TestMinimalistDefaultFallthrough:
+    @staticmethod
+    def _null_solver():
+        from unittest.mock import MagicMock
+        m = MagicMock()
+        m.match_yes_or_no.return_value = None
+        return m
+
+    def test_neutral_input_advances(self, sample_argument: Argument) -> None:
+        """Neutral input (parse_yes_no=None) falls through to next statement."""
+        import difficult_dialogs.yesno as yesno_module
+        policy = MinimalistPolicy(sample_argument)
+        policy.start()
+        old = yesno_module._solver
+        try:
+            yesno_module._solver = self._null_solver()
+            result = policy.handle_input("hmm")
+        finally:
+            yesno_module._solver = old
+        assert result is not None
+
+    def test_neutral_exhausted_returns_conclusion(self, sample_argument: Argument) -> None:
+        """Neutral + exhausted returns truncated conclusion."""
+        import difficult_dialogs.yesno as yesno_module
+        policy = MinimalistPolicy(sample_argument)
+        policy.start()
+        while policy._get_next_statement():
+            pass
+        old = yesno_module._solver
+        try:
+            yesno_module._solver = self._null_solver()
+            result = policy.handle_input("hmm")
+        finally:
+            yesno_module._solver = old
+        assert result is not None  # conclusion[:100]
+
+
+# ---------------------------------------------------------------------------
+# Coverage gap: LLMEnhancedPolicy return-None paths
+# ---------------------------------------------------------------------------
+
+class TestLLMEnhancedNonePaths:
+    def test_start_returns_none_when_inner_returns_none(self, sample_argument: Argument) -> None:
+        """start() returns None when inner policy start() returns None."""
+        from unittest.mock import MagicMock, patch
+        from difficult_dialogs.policy import LLMEnhancedPolicy, SilentPolicy
+        inner = SilentPolicy(sample_argument)
+        enhancer = MagicMock()
+        policy = LLMEnhancedPolicy(sample_argument, inner, enhancer)
+        with patch.object(inner, "start", return_value=None):
+            result = policy.start()
+        assert result is None
+
+    def test_handle_input_returns_none_when_inner_returns_none(self, sample_argument: Argument) -> None:
+        """handle_input() propagates None from inner."""
+        from unittest.mock import MagicMock, patch
+        from difficult_dialogs.policy import LLMEnhancedPolicy, SilentPolicy
+        inner = SilentPolicy(sample_argument)
+        enhancer = MagicMock()
+        policy = LLMEnhancedPolicy(sample_argument, inner, enhancer)
+        policy.start()
+        with patch.object(inner, "handle_input", return_value=None):
+            result = policy.handle_input("yes")
+        assert result is None
+
+    def test_end_returns_none_when_inner_returns_none(self, sample_argument: Argument) -> None:
+        """end() propagates None from inner."""
+        from unittest.mock import MagicMock, patch
+        from difficult_dialogs.policy import LLMEnhancedPolicy, SilentPolicy
+        inner = SilentPolicy(sample_argument)
+        enhancer = MagicMock()
+        policy = LLMEnhancedPolicy(sample_argument, inner, enhancer)
+        policy.start()
+        with patch.object(inner, "end", return_value=None):
+            result = policy.end()
+        assert result is None
+
+
+class TestSkepticAgreementExhausted:
+    def test_agree_exhausted_returns_conclusion(self, sample_argument: Argument) -> None:
+        """SkepticPolicy returns conclusion when no statements left on agreement."""
+        from difficult_dialogs.policy import SkepticPolicy
+        policy = SkepticPolicy(sample_argument)
+        policy.start()
+        while policy._get_next_statement():
+            pass
+        result = policy.handle_input("yes")
+        assert result == str(sample_argument.conclusion)
+        assert policy.state.finished is True
+
+
+class TestSocraticNeutralNull:
+    def test_null_intent_asks_question(self, sample_argument: Argument) -> None:
+        """Null parse_yes_no triggers clarifying question in SocraticPolicy."""
+        import difficult_dialogs.yesno as yesno_module
+        from unittest.mock import MagicMock
+        from difficult_dialogs.policy import SocraticPolicy
+        policy = SocraticPolicy(sample_argument)
+        policy.start()
+        old = yesno_module._solver
+        try:
+            m = MagicMock()
+            m.match_yes_or_no.return_value = None
+            yesno_module._solver = m
+            result = policy.handle_input("hmm")
+        finally:
+            yesno_module._solver = old
+        assert result is not None
+
+
+class TestTeacherNeutral:
+    @staticmethod
+    def _null_solver():
+        from unittest.mock import MagicMock
+        m = MagicMock()
+        m.match_yes_or_no.return_value = None
+        return m
+
+    def test_neutral_calls_teach_with_example(self, sample_argument: Argument) -> None:
+        """Neutral input (parse_yes_no=None, no '?') calls _teach_with_example."""
+        import difficult_dialogs.yesno as yesno_module
+        from difficult_dialogs.policy import TeacherPolicy
+        policy = TeacherPolicy(sample_argument)
+        policy.start()
+        old = yesno_module._solver
+        try:
+            yesno_module._solver = self._null_solver()
+            result = policy.handle_input("tell me more")
+        finally:
+            yesno_module._solver = old
+        assert result is not None
+
+    def test_get_explanation_returns_conclusion_when_exhausted(self, sample_argument: Argument) -> None:
+        """_get_explanation returns conclusion when no statements remain."""
+        from difficult_dialogs.policy import TeacherPolicy
+        policy = TeacherPolicy(sample_argument)
+        policy.start()
+        while policy._get_next_statement():
+            pass
+        result = policy._get_explanation()
+        assert result == sample_argument.conclusion
+
+
+class TestSkepticNeutral:
+    def test_null_intent_needs_convincing(self, sample_argument: Argument) -> None:
+        """Null parse_yes_no returns 'I need more convincing' in SkepticPolicy."""
+        import difficult_dialogs.yesno as yesno_module
+        from unittest.mock import MagicMock
+        from difficult_dialogs.policy import SkepticPolicy
+        policy = SkepticPolicy(sample_argument)
+        policy.start()
+        old = yesno_module._solver
+        try:
+            m = MagicMock()
+            m.match_yes_or_no.return_value = None
+            yesno_module._solver = m
+            result = policy.handle_input("hmm")
+        finally:
+            yesno_module._solver = old
+        assert result == "I need more convincing. What specific evidence can you provide?"
+
+
+class TestMaieuticAgreementExhausted:
+    def test_agree_exhausted_returns_conclusion(self, sample_argument: Argument) -> None:
+        """MaieuticPolicy returns conclusion when agreement but no statements left."""
+        from difficult_dialogs.policy import MaieuticPolicy
+        policy = MaieuticPolicy(sample_argument)
+        policy.start()
+        while policy._get_next_statement():
+            pass
+        result = policy.handle_input("yes")
+        assert result == str(sample_argument.conclusion)
+        assert policy.state.finished is True

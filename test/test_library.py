@@ -187,3 +187,93 @@ def test_flat_layout(tmp_path: Path) -> None:
     lib.scan()
     assert len(lib) == 1
     assert lib.categories() == ["uncategorised"]
+
+
+# ---------------------------------------------------------------------------
+# Coverage gaps
+# ---------------------------------------------------------------------------
+
+def test_search_result_repr(lib: ArgumentLibrary) -> None:
+    """SearchResult.__repr__ includes name, category, and score."""
+    lib.scan()
+    results = lib.search("exercise")
+    assert results
+    r = results[0]
+    text = repr(r)
+    assert "SearchResult" in text
+    assert r.argument.name in text
+
+
+def test_scan_cached_return(lib: ArgumentLibrary) -> None:
+    """Second scan() without reload= returns self without re-scanning."""
+    lib.scan()
+    count_before = len(lib)
+    returned = lib.scan()  # hits the cached branch (line 94)
+    assert returned is lib
+    assert len(lib) == count_before
+
+
+def test_index_argument_skips_broken_dir(tmp_path: Path, monkeypatch) -> None:
+    """_index_argument silently skips directories that fail to load."""
+    import difficult_dialogs.library as lib_module
+    from difficult_dialogs.library import ArgumentLibrary
+
+    arg_dir = tmp_path / "bad_arg"
+    arg_dir.mkdir()
+    (arg_dir / "intro.dialog").write_text("Start")
+    monkeypatch.setattr(lib_module.Argument, "from_directory",
+                        staticmethod(lambda path: (_ for _ in ()).throw(RuntimeError("fail"))))
+
+    lib = ArgumentLibrary(tmp_path)
+    lib.scan()  # should not raise; broken dir is skipped
+    assert len(lib) == 0
+
+
+def test_search_auto_scans(tmp_path: Path) -> None:
+    """search() triggers scan() when not yet scanned."""
+    from difficult_dialogs.library import ArgumentLibrary
+    arg_dir = tmp_path / "my_arg"
+    arg_dir.mkdir()
+    (arg_dir / "intro.dialog").write_text("Intro")
+    (arg_dir / "conclusion.conclusion").write_text("Conclusion")
+    lib = ArgumentLibrary(tmp_path)
+    assert not lib._scanned
+    lib.search("intro")  # must not raise even without explicit scan()
+    assert lib._scanned
+
+
+def test_categories_auto_scans(tmp_path: Path) -> None:
+    """categories() triggers scan() when not yet scanned."""
+    from difficult_dialogs.library import ArgumentLibrary
+    lib = ArgumentLibrary(tmp_path)
+    assert not lib._scanned
+    lib.categories()
+    assert lib._scanned
+
+
+def test_by_category_auto_scans(tmp_path: Path) -> None:
+    """by_category() triggers scan() when not yet scanned."""
+    from difficult_dialogs.library import ArgumentLibrary
+    lib = ArgumentLibrary(tmp_path)
+    assert not lib._scanned
+    lib.by_category("anything")
+    assert lib._scanned
+
+
+def test_get_auto_scans(tmp_path: Path) -> None:
+    """get() triggers scan() when not yet scanned."""
+    from difficult_dialogs.library import ArgumentLibrary
+    lib = ArgumentLibrary(tmp_path)
+    assert not lib._scanned
+    result = lib.get("nonexistent")
+    assert lib._scanned
+    assert result is None
+
+
+def test_all_arguments_auto_scans(tmp_path: Path) -> None:
+    """all_arguments() triggers scan() when not yet scanned."""
+    from difficult_dialogs.library import ArgumentLibrary
+    lib = ArgumentLibrary(tmp_path)
+    assert not lib._scanned
+    lib.all_arguments()
+    assert lib._scanned

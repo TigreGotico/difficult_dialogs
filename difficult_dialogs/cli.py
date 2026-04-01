@@ -241,27 +241,32 @@ def cmd_debate(args: argparse.Namespace) -> int:
     
     # Interactive loop
     try:
-        while True:
-            user_input = input("USER: ").strip().lower()
-            
-            if user_input in ['quit', 'exit', 'q']:
+        while not policy.state.finished:
+            user_input = input("USER: ").strip()
+
+            if user_input.lower() in ('quit', 'exit', 'q'):
                 print(f"\nBOT: {policy.end()}")
                 break
-            
+
             response = policy.handle_input(user_input)
-            
+
             if response:
                 print(f"BOT: {response}")
-                
-                # Check if done
-                next_stmt = policy._get_next_statement()
-                if next_stmt is None and not policy.state.finished:
-                    print(f"\nBOT: {policy.end()}")
-                    break
-                    
+
+            if policy.state.finished:
+                print(f"\nBOT: {policy.end()}")
+                break
+
     except EOFError:
         print(f"\n\nBOT: {policy.end()}")
-    
+
+    # Optional transcript save
+    if getattr(args, "save_transcript", None):
+        from difficult_dialogs.export import export_transcript_to_markdown
+        out = Path(args.save_transcript)
+        export_transcript_to_markdown(policy, output_path=out)
+        print(f"\nTranscript saved to {out}")
+
     return 0
 
 
@@ -467,6 +472,11 @@ def main() -> int:
             "adaptive",
         ],
         help="Dialog policy to use (default: knowitall)"
+    )
+    deb_parser.add_argument(
+        "--save-transcript",
+        metavar="FILE",
+        help="Save the conversation transcript to a Markdown file after the session ends",
     )
     deb_parser.set_defaults(func=cmd_debate)
     

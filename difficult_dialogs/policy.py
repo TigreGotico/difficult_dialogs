@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, AsyncGenerator, Generator
 
 from difficult_dialogs.exceptions import InvalidPolicyError
-from difficult_dialogs.yesno import is_agreement, is_disagreement
+from difficult_dialogs.yesno import is_agreement, is_disagreement, parse_yes_no
 
 if TYPE_CHECKING:
     from difficult_dialogs.arguments import Argument
@@ -142,6 +142,19 @@ class BasePolicy(ABC):
         conclusion = str(self.argument.conclusion)
         self.state.transcript.append(TranscriptEntry(role="bot", text=conclusion))
         return conclusion
+
+    def progress(self) -> tuple[int, int]:
+        """Return ``(premises_covered, total_premises)`` as a progress indicator.
+
+        Useful for progress bars and UI overlays.  A premise is considered
+        *covered* once it appears in :attr:`~PolicyState.spoken_premises`.
+
+        Returns:
+            ``(covered, total)`` — both are non-negative integers.
+        """
+        total = len(self.argument.premises)
+        covered = len(self.state.spoken_premises)
+        return covered, total
 
     def respond(self, user_input: str) -> str | None:
         """Record user input in transcript, then delegate to handle_input.
@@ -527,15 +540,17 @@ class SocraticPolicy(BasePolicy):
             return five_w
 
         # Handle agreement/disagreement
-        if is_disagreement(user_input):
+        _intent = parse_yes_no(user_input)
+
+        if _intent is False:
             self.disagree()
             return self._ask_question()
 
-        if is_agreement(user_input):
+        if _intent is True:
             self.agree()
             return self._advance()
 
-        # Any other input - ask clarifying question
+        # Ambiguous input - ask clarifying question
         return self._ask_question()
     
     def _ask_question(self) -> str:
@@ -779,16 +794,15 @@ class MaieuticPolicy(BasePolicy):
         if five_w:
             return five_w
 
-        _disagrees = is_disagreement(user_lower)
-        _agrees = is_agreement(user_lower)
+        _intent = parse_yes_no(user_lower)
 
-        if _disagrees:
+        if _intent is False:
             templates = self.DISAGREEMENT_QUESTIONS
             template = random.choice(templates)
             self.question_count += 1
             return template.format(topic=self.argument.name.replace("_", " "))
 
-        if _agrees:
+        if _intent is True:
             # After agreement, present the next premise statement
             self.agree()
             next_stmt = self._get_next_statement()
@@ -851,7 +865,9 @@ class SkepticPolicy(BasePolicy):
         if five_w:
             return five_w
 
-        if is_agreement(user_lower):
+        _intent = parse_yes_no(user_lower)
+
+        if _intent is True:
             # After a challenge, advance to next premise statement
             next_stmt = self._get_next_statement()
             if next_stmt is None:
@@ -859,7 +875,7 @@ class SkepticPolicy(BasePolicy):
                 return str(self.argument.conclusion)
             return random.choice(self.CHALLENGE_PHRASES)
 
-        if is_disagreement(user_lower):
+        if _intent is False:
             next_stmt = self._get_next_statement()
             if next_stmt:
                 _, statement = next_stmt
@@ -912,7 +928,9 @@ class TeacherPolicy(BasePolicy):
         if '?' in user_input:
             return random.choice(self.TRANSITION_PHRASES) + " " + self._get_explanation()
 
-        if is_agreement(user_lower):
+        _intent = parse_yes_no(user_lower)
+
+        if _intent is True:
             # Consume and advance to next statement with reinforcement framing
             next_stmt = self._get_next_statement()
             if next_stmt is None:
@@ -921,7 +939,7 @@ class TeacherPolicy(BasePolicy):
             summary = random.choice(self.SUMMARY_PHRASES)
             return f"{summary}{next_stmt[1]}"
 
-        if is_disagreement(user_lower):
+        if _intent is False:
             return self._clarify_misconception()
 
         return self._teach_with_example()
@@ -997,10 +1015,12 @@ class DebaterPolicy(BasePolicy):
                 return f"{attack} {counter}"
             return attack
 
-        if is_agreement(user_lower):
+        _intent = parse_yes_no(user_lower)
+
+        if _intent is True:
             return random.choice(self.DEFENSE_PHRASES)
 
-        if is_disagreement(user_lower):
+        if _intent is False:
             next_stmt = self._get_next_statement()
             if next_stmt:
                 _, statement = next_stmt
@@ -1031,10 +1051,12 @@ class MinimalistPolicy(BasePolicy):
         if five_w:
             return five_w[:100] + ("..." if len(five_w) > 100 else "")
 
-        if is_agreement(user_lower):
+        _intent = parse_yes_no(user_lower)
+
+        if _intent is True:
             return random.choice(self.BRIEF_AGREE)
 
-        if is_disagreement(user_lower):
+        if _intent is False:
             next_stmt = self._get_next_statement()
             if next_stmt:
                 _, stmt = next_stmt
