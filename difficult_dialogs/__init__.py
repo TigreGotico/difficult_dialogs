@@ -35,6 +35,7 @@ from difficult_dialogs.policy import (
     get_policy,
 )
 
+from difficult_dialogs.yesno import parse_yes_no, is_agreement, is_disagreement, set_solver
 from difficult_dialogs.library import ArgumentLibrary, SearchResult
 from difficult_dialogs.builder import ArgumentBuilder, PremiseBuilder
 from difficult_dialogs.version import __version__
@@ -68,6 +69,11 @@ __all__ = [
     "WebhookPolicy",
     "LLMEnhancedPolicy",
     "MultiArgumentPolicy",
+    # Yes/no parsing
+    "parse_yes_no",
+    "is_agreement",
+    "is_disagreement",
+    "set_solver",
     # Builder
     "ArgumentBuilder",
     "PremiseBuilder",
