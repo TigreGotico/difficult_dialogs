@@ -60,7 +60,7 @@ def _load_solver(plugin_name: str = _DEFAULT_PLUGIN) -> YesNoSolverProtocol:
         try:
             cls = eps[name].load()
             instance = cls()
-            if isinstance(instance, YesNoSolverProtocol):
+            if callable(getattr(instance, "match_yes_or_no", None)):
                 logger.debug("difficult_dialogs: loaded yes/no solver '%s'", name)
                 return instance
         except Exception as exc:
