@@ -134,6 +134,8 @@ class BasePolicy(ABC):
             Intro statement text.
         """
         self.state = PolicyState()
+        if self.argument.entry_point:
+            self.state.current_premise = self.argument.entry_point
         intro = str(self.argument.intro)
         self.state.transcript.append(TranscriptEntry(role="bot", text=intro))
         return intro
@@ -1591,7 +1593,7 @@ class MultiChoicePolicy(BasePolicy):
             outcome = chosen.outcome
 
             # Jump to an explicit next_premise if the choice carries one
-            if chosen.next_premise and chosen.next_premise in self.argument._premises:
+            if chosen.next_premise and self.argument.get_premise(chosen.next_premise) is not None:
                 premise = self.argument.get_premise(chosen.next_premise)
                 if premise:
                     self.state.current_premise = premise.name
@@ -1623,8 +1625,7 @@ class MultiChoicePolicy(BasePolicy):
                 support = self._get_support()
                 if support:
                     return support
-                # No more support — advance anyway
-                self.state.user_agrees = True
+                # No more support — advance along the disagree edge
                 result = self._get_next_statement()
                 if result:
                     _, text = result
@@ -1666,7 +1667,7 @@ class MultiChoicePolicy(BasePolicy):
             support = self._get_support()
             if support:
                 return support
-            self.state.user_agrees = True
+            # No more support — advance along the disagree edge
             result = self._get_next_statement()
             if result:
                 _, text = result
