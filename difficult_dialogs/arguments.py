@@ -290,6 +290,7 @@ class Argument:
                 (premise.how,        ".how"),
                 (premise.when,       ".when"),
                 (premise.where,      ".where"),
+                (premise.who,        ".who"),
             ]
 
             for items, ext in _FIELDS:
