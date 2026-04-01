@@ -794,5 +794,62 @@ class TestCmdReplay:
         assert "transcript" in result.stdout
 
 
+COGITO_DIR = str(Path(__file__).parent.parent / "examples" / "i_think_therefore_i_am")
+
+
+class TestCmdDiff:
+    """Tests for `did diff`."""
+
+    def test_diff_identical(self, capsys) -> None:
+        from difficult_dialogs.cli import cmd_diff
+        rc = cmd_diff(argparse.Namespace(argument_a=COGITO_DIR, argument_b=COGITO_DIR))
+        assert rc == 0
+        assert "identical" in capsys.readouterr().out
+
+    def test_diff_bad_path(self, capsys) -> None:
+        from difficult_dialogs.cli import cmd_diff
+        rc = cmd_diff(argparse.Namespace(argument_a=COGITO_DIR, argument_b="/no/such/path"))
+        assert rc == 1
+
+    def test_diff_modified(self, tmp_path: Path, capsys) -> None:
+        """A copy with a modified intro should show a META change."""
+        import shutil
+        copy_dir = tmp_path / "copy"
+        shutil.copytree(COGITO_DIR, copy_dir)
+        intro_file = copy_dir / "intro.dialog"
+        intro_file.write_text("Modified intro text.")
+
+        from difficult_dialogs.cli import cmd_diff
+        rc = cmd_diff(argparse.Namespace(argument_a=COGITO_DIR, argument_b=str(copy_dir)))
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert "META" in out or "intro" in out
+
+    def test_diff_help(self) -> None:
+        result = subprocess.run(
+            [sys.executable, "-m", "difficult_dialogs.cli", "diff", "--help"],
+            capture_output=True, text=True,
+        )
+        assert result.returncode == 0
+        assert "argument_a" in result.stdout or "argument" in result.stdout
+
+
+class TestCmdSolvers:
+    """Tests for `did solvers`."""
+
+    def test_solvers_runs(self) -> None:
+        """Command should exit without crashing (0 or 1 depending on installed plugins)."""
+        result = subprocess.run(
+            [sys.executable, "-m", "difficult_dialogs.cli", "solvers"],
+            capture_output=True, text=True,
+        )
+        assert result.returncode in (0, 1)
+
+    def test_list_solvers_returns_dict(self) -> None:
+        from difficult_dialogs.yesno import list_solvers
+        result = list_solvers()
+        assert isinstance(result, dict)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

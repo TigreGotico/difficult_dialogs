@@ -35,7 +35,7 @@ from difficult_dialogs.policy import (
     get_policy,
 )
 
-from difficult_dialogs.yesno import parse_yes_no, is_agreement, is_disagreement, set_solver, configure
+from difficult_dialogs.yesno import parse_yes_no, is_agreement, is_disagreement, set_solver, configure, list_solvers
 from difficult_dialogs.library import ArgumentLibrary, SearchResult
 from difficult_dialogs.builder import ArgumentBuilder, PremiseBuilder
 from difficult_dialogs.validators import (
@@ -86,6 +86,7 @@ __all__ = [
     "is_disagreement",
     "set_solver",
     "configure",
+    "list_solvers",
     # Builder
     "ArgumentBuilder",
     "PremiseBuilder",

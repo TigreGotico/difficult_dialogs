@@ -122,6 +122,28 @@ def configure(yesno_plugin: str = _DEFAULT_PLUGIN) -> None:
 # Public API
 # ---------------------------------------------------------------------------
 
+def list_solvers() -> dict[str, str]:
+    """Return a mapping of entry-point name → entry-point value for all registered yes/no solvers.
+
+    Returns:
+        Dict of ``{name: dotted.path.ClassName}`` for every plugin found in
+        :data:`_ENTRY_POINT_GROUPS`.  Returns an empty dict when none are installed.
+
+    Example::
+
+        from difficult_dialogs.yesno import list_solvers
+        print(list_solvers())
+        # {'ovos-solver-yes-no-plugin': 'ovos_yes_no_solver:YesNoSolver'}
+    """
+    import importlib.metadata as _meta
+
+    result: dict[str, str] = {}
+    for group in _ENTRY_POINT_GROUPS:
+        for ep in _meta.entry_points(group=group):
+            result.setdefault(ep.name, ep.value)
+    return result
+
+
 def parse_yes_no(text: str, lang: str = "en-US") -> bool | None:
     """Parse natural-language text as agreement, disagreement, or neither.
 

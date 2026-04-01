@@ -412,6 +412,87 @@ def cmd_replay(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_diff(args: argparse.Namespace) -> int:
+    """Show a human-readable diff between two argument directories."""
+    from difficult_dialogs.arguments import Argument
+
+    path_a = Path(args.argument_a)
+    path_b = Path(args.argument_b)
+
+    for p in (path_a, path_b):
+        if not p.exists():
+            print(f"❌ Error: Path not found: {p}")
+            return 1
+
+    try:
+        arg_a = Argument.from_directory(path_a)
+        arg_b = Argument.from_directory(path_b)
+    except Exception as exc:
+        print(f"❌ Error loading argument: {exc}")
+        return 1
+
+    diff = arg_a.diff(arg_b)
+
+    has_changes = diff["meta"] or diff["added_premises"] or diff["removed_premises"] or diff["modified_premises"]
+    if not has_changes:
+        print("✅ Arguments are identical.")
+        return 0
+
+    if diff["meta"]:
+        print("META CHANGES:")
+        for field, (old, new) in diff["meta"].items():
+            print(f"  {field}:")
+            print(f"    - {old!r}")
+            print(f"    + {new!r}")
+        print()
+
+    if diff["added_premises"]:
+        print("ADDED PREMISES:")
+        for name in diff["added_premises"]:
+            print(f"  + {name}")
+        print()
+
+    if diff["removed_premises"]:
+        print("REMOVED PREMISES:")
+        for name in diff["removed_premises"]:
+            print(f"  - {name}")
+        print()
+
+    if diff["modified_premises"]:
+        print("MODIFIED PREMISES:")
+        for name, changes in diff["modified_premises"].items():
+            print(f"  ~ {name}:")
+            for stmt in changes.get("added_statements", []):
+                print(f"      + {stmt!r}")
+            for stmt in changes.get("removed_statements", []):
+                print(f"      - {stmt!r}")
+        print()
+
+    return 0
+
+
+def cmd_solvers(args: argparse.Namespace) -> int:
+    """List available yes/no solver plugins."""
+    import importlib.metadata
+    from difficult_dialogs.yesno import _ENTRY_POINT_GROUPS, _DEFAULT_PLUGIN
+
+    eps: dict[str, importlib.metadata.EntryPoint] = {}
+    for group in _ENTRY_POINT_GROUPS:
+        for ep in importlib.metadata.entry_points(group=group):
+            eps.setdefault(ep.name, ep)
+
+    if not eps:
+        print(f"No yes/no solver plugins found in entry-point groups: {_ENTRY_POINT_GROUPS}")
+        print(f"Install the default: pip install {_DEFAULT_PLUGIN}")
+        return 1
+
+    print(f"Available yes/no solvers ({', '.join(_ENTRY_POINT_GROUPS)}):")
+    for name, ep in sorted(eps.items()):
+        marker = " [default]" if name == _DEFAULT_PLUGIN else ""
+        print(f"  {name}{marker}  ({ep.value})")
+    return 0
+
+
 def cmd_list(args: argparse.Namespace) -> int:
     """List available arguments."""
     from difficult_dialogs.arguments import Argument
@@ -737,6 +818,23 @@ def main() -> int:
         help="Path to a JSON transcript file (saved by --save-transcript or export_transcript_to_json)",
     )
     replay_parser.set_defaults(func=cmd_replay)
+
+    # Diff command
+    diff_parser = subparsers.add_parser(
+        "diff",
+        help="Show a human-readable diff between two argument directories",
+    )
+    diff_parser.add_argument("argument_a", help="Path to first argument directory (base)")
+    diff_parser.add_argument("argument_b", help="Path to second argument directory (comparison)")
+    diff_parser.set_defaults(func=cmd_diff)
+
+    # Solvers command
+    solvers_parser = subparsers.add_parser(
+        "solvers",
+        aliases=["solver"],
+        help="List available yes/no solver plugins",
+    )
+    solvers_parser.set_defaults(func=cmd_solvers)
 
     # List command
     list_parser = subparsers.add_parser(
