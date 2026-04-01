@@ -23,22 +23,22 @@
 - [x] `ArgumentLibrary.watch(callback)` — hot-reload index on filesystem change
       (requires `watchdog`)
 - [x] `progress()` in REST server `GET /sessions/{id}` response
-- [ ] WebSocket endpoint in `examples/server.py` for streaming dialog
+- [x] WebSocket endpoint in `examples/server.py` for streaming dialog
 
 ## v0.8 — Multi-language & Solver Ecosystem
 
 - [ ] Solver auto-discovery via `opm.agents.yesno` entry points (scaffolding
       already present in `yesno.py`)
 - [x] Language routing in `BasePolicy` — pass `lang` through to `parse_yes_no`
-- [ ] `Premise` i18n: `translations: dict[str, dict[str, str]]` field for
-      statement text in multiple locales
+- [x] `Premise` i18n: `translations: dict[str, dict[str, list[str]]]` field
+      for statement text in multiple locales; locale-specific file format
 
 ## v1.0 — Stable Public API
 
 - [ ] Semantic versioning guarantee on all symbols in `__all__`
 - [ ] `ArgumentDiff` / `ArgumentMerge` high-level UX (`diff()` and `merge()`
       primitives exist in `arguments.py` but have no standalone API surface)
-- [ ] Formal plugin spec for custom policies via entry-point group
+- [x] Formal plugin spec for custom policies via entry-point group
       `difficult_dialogs.policies`
-- [ ] `did debate --watch` — reload argument file on change without restarting
+- [x] `did debate --watch` — reload argument file on change without restarting
       the CLI session
