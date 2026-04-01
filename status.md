@@ -1,7 +1,7 @@
 # Status — Multiple Choice + Branching
 
 - [x] Step 1: Create `difficult_dialogs/choices.py` — ChoiceOption, ChoiceSolverProtocol, parse_choice()
-- [ ] Step 2: Update `premises.py` — add choices, on_agree, on_disagree fields + file loading
+- [x] Step 2: Update `premises.py` — add choices, on_agree, on_disagree fields + file loading
 - [ ] Step 3: Update `arguments.py` — list→dict premises, entry_point, next_premise() graph traversal
 - [ ] Step 4: Update `policy.py` — _advance() via next_premise(), add MultiChoicePolicy
 - [ ] Step 5: Update `builder.py` — choice(), on_agree(), on_disagree(), entry_point() fluent methods

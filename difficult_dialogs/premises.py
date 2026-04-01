@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from difficult_dialogs.choices import ChoiceOption, parse_choices_file
 from difficult_dialogs.statements import Statement
 
 
@@ -42,6 +43,9 @@ class Premise:
     where: list[str] = field(default_factory=list)
     who: list[str] = field(default_factory=list)
     translations: dict[str, dict[str, list[str]]] = field(default_factory=dict)
+    choices: list[ChoiceOption] = field(default_factory=list)
+    on_agree: str | None = None
+    on_disagree: str | None = None
     
     def __post_init__(self) -> None:
         """Set description from name if not provided."""
@@ -132,6 +136,33 @@ class Premise:
             self.who.append(text)
         return self
 
+    def add_choice(
+        self,
+        text: str,
+        outcome: str = "agree",
+        next_premise: str | None = None,
+        label: str | None = None,
+    ) -> Premise:
+        """Append a multiple-choice option to this premise.
+
+        Args:
+            text: Human-readable option description.
+            outcome: Semantic outcome — ``"agree"``, ``"disagree"``,
+                ``"clarify"``, or ``"skip"``.
+            next_premise: Optional name of the premise to jump to when
+                this option is selected.
+            label: Short label (e.g. ``"A"``).  Auto-assigned from
+                ``A``, ``B``, ``C``… if omitted.
+
+        Returns:
+            Self for method chaining.
+        """
+        auto_labels = list("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+        if label is None:
+            label = auto_labels[len(self.choices)] if len(self.choices) < len(auto_labels) else str(len(self.choices) + 1)
+        self.choices.append(ChoiceOption(label=label, text=text, outcome=outcome, next_premise=next_premise))
+        return self
+
     def apply_file(self, file: Path) -> None:
         """Apply the contents of a plain-text file to the appropriate field.
 
@@ -157,6 +188,23 @@ class Premise:
             ".where":   self.add_where,
             ".who":     self.add_who,
         }
+
+        # .choices — multi-choice options; parse whole file at once
+        if file.suffix == ".choices":
+            for opt in parse_choices_file(content):
+                self.choices.append(opt)
+            return
+
+        # .on_agree / .on_disagree — single line, the name of the next premise
+        if file.suffix == ".on_agree":
+            if lines:
+                self.on_agree = lines[0]
+            return
+        if file.suffix == ".on_disagree":
+            if lines:
+                self.on_disagree = lines[0]
+            return
+
         # Check for locale-specific file: name.es-ES.premise → lang="es-ES", field="premise"
         # Filename pattern: <stem>.<lang-code>.<field>  where lang contains a hyphen
         parts = file.name.split(".")
@@ -256,6 +304,12 @@ class Premise:
                 lang: {field: list(texts) for field, texts in fields.items()}
                 for lang, fields in self.translations.items()
             }
+        if self.choices:
+            d["choices"] = [c.to_dict() for c in self.choices]
+        if self.on_agree is not None:
+            d["on_agree"] = self.on_agree
+        if self.on_disagree is not None:
+            d["on_disagree"] = self.on_disagree
         return d
     
     @classmethod
@@ -304,6 +358,12 @@ class Premise:
             for field_name, texts in fields.items():
                 for text in texts:
                     premise.add_translation(lang, field_name, text)
+
+        for choice_data in data.get("choices", []):
+            premise.choices.append(ChoiceOption.from_dict(choice_data))
+
+        premise.on_agree = data.get("on_agree") or None
+        premise.on_disagree = data.get("on_disagree") or None
 
         return premise
     
