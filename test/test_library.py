@@ -125,9 +125,10 @@ def test_search_returns_results(lib: ArgumentLibrary) -> None:
     assert all(isinstance(r, SearchResult) for r in results)
 
 
-def test_search_scores_between_0_and_1(lib: ArgumentLibrary) -> None:
+def test_search_scores_positive(lib: ArgumentLibrary) -> None:
+    """All returned scores must be strictly positive (BM25 or token-overlap)."""
     for r in lib.search("climate change science"):
-        assert 0.0 < r.score <= 1.0
+        assert r.score > 0.0
 
 
 def test_search_sorted_by_score_descending(lib: ArgumentLibrary) -> None:
@@ -277,6 +278,41 @@ def test_all_arguments_auto_scans(tmp_path: Path) -> None:
     assert not lib._scanned
     lib.all_arguments()
     assert lib._scanned
+
+
+# ---------------------------------------------------------------------------
+# BM25 search
+# ---------------------------------------------------------------------------
+
+def test_search_bm25_used_when_available(lib: ArgumentLibrary, monkeypatch) -> None:
+    """search() uses BM25Okapi when rank_bm25 is importable."""
+    try:
+        import rank_bm25  # noqa: F401
+        bm25_available = True
+    except ImportError:
+        bm25_available = False
+
+    if not bm25_available:
+        pytest.skip("rank_bm25 not installed")
+
+    results = lib.search("exercise health")
+    assert results
+    # BM25 scores may exceed 1.0; they must be positive
+    assert all(r.score > 0.0 for r in results)
+
+
+def test_search_falls_back_to_token_overlap_without_bm25(lib: ArgumentLibrary, monkeypatch) -> None:
+    """search() falls back to token-overlap scoring when rank_bm25 is absent."""
+    import sys
+    import unittest.mock as mock
+
+    with mock.patch.dict(sys.modules, {"rank_bm25": None}):
+        results = lib.search("exercise health")
+
+    assert results
+    # Fallback scores are in (0, 1]
+    for r in results:
+        assert 0.0 < r.score <= 1.0
 
 
 # ---------------------------------------------------------------------------

@@ -147,9 +147,9 @@ class ArgumentLibrary:
     ) -> list[SearchResult]:
         """Search the index for arguments matching *query*.
 
-        Scoring is token-based: each query word that appears in the
-        searchable text adds 1 to the score.  Results are sorted by
-        descending score; ties preserve scan order.
+        Uses BM25 scoring via the ``rank_bm25`` package when available
+        (install with ``pip install "difficult_dialogs[bm25]"``).  Falls back
+        to simple token-overlap scoring when ``rank_bm25`` is not installed.
 
         Args:
             query: Space-separated keywords to search for.
@@ -166,20 +166,46 @@ class ArgumentLibrary:
         if not tokens:
             return []
 
-        results: list[SearchResult] = []
-        for entry in self._index:
-            if category and entry.category.lower() != category.lower():
-                continue
-            matched = [t for t in tokens if t in entry.searchable]
-            if not matched:
-                continue
-            score = len(matched) / len(tokens)
-            results.append(SearchResult(
-                argument=entry.argument,
-                category=entry.category,
-                score=score,
-                matched_fields=matched,
-            ))
+        candidates = [
+            entry for entry in self._index
+            if not category or entry.category.lower() == category.lower()
+        ]
+        if not candidates:
+            return []
+
+        try:
+            from rank_bm25 import BM25Okapi  # type: ignore[import]
+
+            corpora = [entry.searchable.split() for entry in candidates]
+            bm25 = BM25Okapi(corpora)
+            scores = bm25.get_scores(tokens)
+
+            results: list[SearchResult] = []
+            for entry, score in zip(candidates, scores):
+                if score <= 0:
+                    continue
+                matched = [t for t in tokens if t in entry.searchable]
+                results.append(SearchResult(
+                    argument=entry.argument,
+                    category=entry.category,
+                    score=float(score),
+                    matched_fields=matched,
+                ))
+
+        except ImportError:
+            # Fallback: simple token-overlap scoring
+            results = []
+            for entry in candidates:
+                matched = [t for t in tokens if t in entry.searchable]
+                if not matched:
+                    continue
+                score = len(matched) / len(tokens)
+                results.append(SearchResult(
+                    argument=entry.argument,
+                    category=entry.category,
+                    score=score,
+                    matched_fields=matched,
+                ))
 
         results.sort(key=lambda r: r.score, reverse=True)
         return results[:limit]

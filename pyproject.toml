@@ -59,6 +59,9 @@ server = [
 choice = [
     "ovos-solver-bm25-plugin",
 ]
+bm25 = [
+    "rank-bm25>=0.2.2",
+]
 all = [
     "tqdm>=4.65.0",
     "streamlit>=1.28.0",
@@ -66,6 +69,7 @@ all = [
     "uvicorn[standard]>=0.23.0",
     "watchdog>=3.0.0",
     "ovos-solver-bm25-plugin",
+    "rank-bm25>=0.2.2",
 ]
 
 [project.scripts]
