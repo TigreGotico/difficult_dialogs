@@ -43,7 +43,10 @@ policy = MultiArgumentPolicy([(arg1, "knowitall"), (arg2, "silent")])
 ```
 
 **Q: Can I save and restore a session?**
-A: Yes. `PolicyState.to_dict()` / `PolicyState.from_dict()` (`policy.py:49-88`) produce JSON-safe dicts. Restore with `policy.restore_state(state_dict)`.
+A: Yes — two levels of convenience. Quick file persistence: `policy.save_state("session.json")` / `policy.load_state("session.json")` (`BasePolicy.save_state` — `policy.py`). For key-value stores (Redis, DB): `PolicyState.to_dict()` / `PolicyState.from_dict()` produce JSON-safe dicts; restore with `policy.restore_state(state_dict)`.
+
+**Q: Can I switch the active policy mid-conversation?**
+A: Yes. `AdaptivePolicy.set_policy(new_policy_instance)` transfers all state and activates the new policy immediately (`policy.py:AdaptivePolicy.set_policy`).
 
 **Q: How do I run the dialog in a loop?**
 A: Use `policy.run_sync()` — a generator that yields bot responses and accepts user input via `.send()`:
@@ -75,7 +78,16 @@ results = lib.search("climate change")
 ## Server / CLI
 
 **Q: How do I run the REST API?**
-A: `dd serve --host 0.0.0.0 --port 8080` — starts a FastAPI server defined in `server.py`.
+A: `did serve --host 0.0.0.0 --port 8080` — dynamically loads `examples/server.py` (FastAPI demo app, not part of the library).
 
 **Q: How do I list available CLI commands?**
-A: `dd --help`.
+A: `did --help`.
+
+**Q: Can I run a debate non-interactively (from a script or CI)?**
+A: Yes. Use `did debate ARG_DIR --input-file turns.txt` where `turns.txt` has one user turn per line. Output goes to stdout.
+
+**Q: How do I validate argument quality?**
+A: `ArgumentValidator` (importable from `difficult_dialogs`) scores arguments and returns a `ValidationResult` with per-issue severity. Also available via CLI: `did validate ARG_DIR`.
+
+**Q: How do I use a custom yes/no solver (e.g. for non-English)?**
+A: Call `set_solver(my_solver)` or `configure(plugin_name)` from `difficult_dialogs` at startup to replace the default OPM plugin.
