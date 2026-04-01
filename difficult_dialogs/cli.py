@@ -214,17 +214,72 @@ def cmd_debate(args: argparse.Namespace) -> int:
         print(f"❌ Error: Argument not found: {arg_path}")
         return 1
 
-    # Load argument
+    # Load argument (with optional --watch hot-reload)
+    def _load() -> "Argument":
+        return Argument().load(arg_path)
+
     try:
-        argument = Argument().load(arg_path)
+        argument = _load()
     except Exception as e:
         print(f"❌ Error loading argument: {e}")
         return 1
+
+    if getattr(args, "watch", False):
+        import threading
+        _reload_lock = threading.Lock()
+        _current: list = [argument]
+
+        def _reload(_event: object = None) -> None:
+            try:
+                new_arg = _load()
+                with _reload_lock:
+                    _current[0] = new_arg
+                print("\n[watch] Argument reloaded.")
+            except Exception as exc:
+                print(f"\n[watch] Reload failed: {exc}")
+
+        try:
+            from watchdog.observers import Observer
+            from watchdog.events import FileSystemEventHandler
+
+            class _Handler(FileSystemEventHandler):
+                def on_any_event(self, event) -> None:  # type: ignore[override]
+                    if not event.is_directory:
+                        _reload()
+
+            observer = Observer()
+            observer.schedule(_Handler(), str(arg_path), recursive=True)
+            observer.daemon = True  # type: ignore[attr-defined]
+            observer.start()
+        except ImportError:
+            import time
+            def _poll() -> None:
+                last_mtime = sum(
+                    p.stat().st_mtime for p in arg_path.rglob("*") if p.is_file()
+                )
+                while True:
+                    time.sleep(1.0)
+                    try:
+                        mtime = sum(
+                            p.stat().st_mtime for p in arg_path.rglob("*") if p.is_file()
+                        )
+                    except OSError:
+                        continue
+                    if mtime != last_mtime:
+                        last_mtime = mtime
+                        _reload()
+
+            threading.Thread(target=_poll, daemon=True).start()
+
+        # Wrap argument so policy always uses the freshest version
+        argument = _current[0]
 
     policy_name = args.policy or "knowitall"
 
     print(f"ARGUMENT: {argument.name}")
     print(f"POLICY:   {policy_name}")
+    if getattr(args, "watch", False):
+        print(f"[watch]   Watching {arg_path} for changes")
     print("=" * 60)
     print()
 
@@ -637,6 +692,11 @@ def main() -> int:
         "--input-file",
         metavar="FILE",
         help="Read user turns from a file (one per line) instead of stdin — useful for scripting and CI",
+    )
+    deb_parser.add_argument(
+        "--watch",
+        action="store_true",
+        help="Watch the argument directory for file changes and reload without restarting the session",
     )
     deb_parser.set_defaults(func=cmd_debate)
     
