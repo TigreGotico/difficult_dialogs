@@ -13,13 +13,13 @@
 - [x] `did debate --input-file FILE` — non-interactive / CI-friendly debate runs
 - [x] Rename CLI entrypoint `dd` → `did` (avoids conflict with system `dd`)
 - [x] `py.typed` PEP 561 marker — type checkers treat package as fully typed
-- [ ] Document `BasePolicy.stream()` async usage in USER_GUIDE.md
+- [x] Document `BasePolicy.stream()` async usage in USER_GUIDE.md
 
 ## v0.7 — Developer Experience
 
-- [ ] `did replay FILE` — step through a saved transcript non-interactively,
+- [x] `did replay FILE` — step through a saved transcript non-interactively,
       useful for regression tests
-- [ ] `did score ARG_DIR` — one-line quality score (no full validate output)
+- [x] `did score ARG_DIR` — one-line quality score (no full validate output)
 - [ ] `ArgumentLibrary.watch(callback)` — hot-reload index on filesystem change
       (requires `watchdog`)
 - [ ] `progress()` in REST server `GET /sessions/{id}` response
