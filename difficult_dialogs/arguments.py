@@ -43,6 +43,7 @@ class Argument:
     name: str = ""
     intro: str = ""
     conclusion: str = ""
+    entry_point: str = ""
     path: Path | None = field(default=None, init=False)
     _premises: dict[str, Premise] = field(default_factory=dict, repr=False)
     
@@ -97,10 +98,10 @@ class Argument:
     
     def get_next_premise(self, cache: set[str]) -> Premise | None:
         """Get the next unspoken premise.
-        
+
         Args:
             cache: Set of already spoken premise names.
-            
+
         Returns:
             Next premise to present, or None if all spoken.
         """
@@ -108,6 +109,53 @@ class Argument:
             if name not in cache and premise.is_complete:
                 return premise
         return None
+
+    def next_premise(self, current_name: str, outcome: str = "agree") -> str | None:
+        """Return the name of the next premise to visit after *current_name*.
+
+        Resolution order:
+
+        1. If the current premise has an explicit ``on_agree`` / ``on_disagree``
+           target (depending on *outcome*), use it.
+        2. If the current premise has ``ChoiceOption`` entries that carry a
+           ``next_premise`` name for the chosen outcome, use the first match.
+        3. Fall back to the insertion-order successor (linear behaviour,
+           preserving backwards compatibility with flat argument files).
+
+        Args:
+            current_name: Name of the premise just presented.
+            outcome: Semantic outcome — ``"agree"``, ``"disagree"``,
+                ``"clarify"``, or ``"skip"``.  Only ``"agree"`` and
+                ``"disagree"`` are used for branch resolution; everything
+                else follows linear order.
+
+        Returns:
+            Name of the next premise, or ``None`` if the argument is finished.
+        """
+        current = self._premises.get(current_name)
+        if current is None:
+            return None
+
+        # 1. Explicit on_agree / on_disagree branch
+        if outcome == "agree" and current.on_agree:
+            return current.on_agree if current.on_agree in self._premises else None
+        if outcome == "disagree" and current.on_disagree:
+            return current.on_disagree if current.on_disagree in self._premises else None
+
+        # 2. ChoiceOption.next_premise for this outcome
+        for choice in current.choices:
+            if choice.outcome == outcome and choice.next_premise:
+                if choice.next_premise in self._premises:
+                    return choice.next_premise
+
+        # 3. Linear fallback — insertion-order successor
+        names = list(self._premises.keys())
+        try:
+            idx = names.index(current_name)
+        except ValueError:
+            return None
+        next_idx = idx + 1
+        return names[next_idx] if next_idx < len(names) else None
     
     def load(self, path: str | Path) -> Argument:
         """Load argument from a directory structure.
@@ -250,6 +298,27 @@ class Argument:
                 lines = [str(item) for item in items]
                 (pdir / f"{premise.name}{ext}").write_text("\n".join(lines))
 
+            # Write choices file
+            if premise.choices:
+                choice_lines: list[str] = []
+                for opt in premise.choices:
+                    line = f"{opt.label}) {opt.text}"
+                    if opt.next_premise:
+                        line += f" -> {opt.next_premise}"
+                    else:
+                        # record non-default outcomes explicitly
+                        from difficult_dialogs.choices import _POSITIONAL_OUTCOMES
+                        default = _POSITIONAL_OUTCOMES.get(opt.label, "agree")
+                        if opt.outcome != default:
+                            line += f" [{opt.outcome}]"
+                    choice_lines.append(line)
+                (pdir / f"{premise.name}.choices").write_text("\n".join(choice_lines))
+
+            if premise.on_agree:
+                (pdir / f"{premise.name}.on_agree").write_text(premise.on_agree)
+            if premise.on_disagree:
+                (pdir / f"{premise.name}.on_disagree").write_text(premise.on_disagree)
+
         self.path = dest
         return dest
 
@@ -259,13 +328,16 @@ class Argument:
         Returns:
             Dictionary with argument data.
         """
-        return {
+        d: dict[str, Any] = {
             "name": self.name,
             "intro": self.intro,
             "conclusion": self.conclusion,
             "premises": [p.to_dict() for p in self.premises],
             "is_true": self.is_true,
         }
+        if self.entry_point:
+            d["entry_point"] = self.entry_point
+        return d
     
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Argument:
@@ -281,12 +353,13 @@ class Argument:
             name=data.get("name", ""),
             intro=data.get("intro", ""),
             conclusion=data.get("conclusion", ""),
+            entry_point=data.get("entry_point", ""),
         )
-        
+
         for premise_data in data.get("premises", []):
             premise = Premise.from_dict(premise_data)
             arg.add_premise(premise)
-        
+
         return arg
     
     def diff(self, other: Argument) -> dict[str, Any]:
