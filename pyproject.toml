@@ -29,10 +29,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
-dependencies = [
-    "requests>=2.28.0",
-    "ovos-solver-yes-no-plugin",
-]
+dependencies = []
 
 [project.optional-dependencies]
 dev = [
@@ -56,6 +53,9 @@ server = [
     "fastapi>=0.100.0",
     "uvicorn[standard]>=0.23.0",
 ]
+ovos = [
+    "ovos-solver-yes-no-plugin",
+]
 choice = [
     "ovos-solver-bm25-plugin",
 ]
@@ -68,6 +68,7 @@ all = [
     "fastapi>=0.100.0",
     "uvicorn[standard]>=0.23.0",
     "watchdog>=3.0.0",
+    "ovos-solver-yes-no-plugin",
     "ovos-solver-bm25-plugin",
     "rank-bm25>=0.2.2",
 ]
