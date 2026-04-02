@@ -14,7 +14,7 @@
 
 ### MEDIUM TERM — DX & Publishability (v0.9)
 
-- [ ] Publish to PyPI — align org name, run release workflow, tag v0.9.0
+- [ ] Publish to PyPI — BLOCKED: org name conflict (tigregotico vs JarbasAl) must be resolved by human owner
 - [x] OPM choice-solver auto-discovery — already implemented; updated `did solvers` to show both yes/no and choice solver sections
 - [x] `ArgumentBuilder.branch()` shorthand — already implemented and tested in builder.py + test_builder_choices.py
 - [x] Add `timeout` parameter to `WebhookPolicy` — already implemented; added 2 tests for timeout storage and fallback behavior
