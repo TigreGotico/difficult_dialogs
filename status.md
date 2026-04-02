@@ -16,8 +16,8 @@
 
 - [ ] Publish to PyPI — align org name, run release workflow, tag v0.9.0
 - [x] OPM choice-solver auto-discovery — already implemented; updated `did solvers` to show both yes/no and choice solver sections
-- [ ] `ArgumentBuilder.branch()` shorthand — add method, update docs, add tests
-- [ ] Add `timeout` parameter to `WebhookPolicy` — prevent hang on dead endpoints; add test
+- [x] `ArgumentBuilder.branch()` shorthand — already implemented and tested in builder.py + test_builder_choices.py
+- [x] Add `timeout` parameter to `WebhookPolicy` — already implemented; added 2 tests for timeout storage and fallback behavior
 - [ ] Latency benchmark script — `scripts/benchmark.py`; 100 turns × 14 policies; print p50/p95
 
 ### LONG TERM — Stable API & Ecosystem (v1.0+)

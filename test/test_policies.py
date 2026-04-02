@@ -617,6 +617,29 @@ class TestWebhookPolicy:
         )
         assert isinstance(policy._fallback, SilentPolicy)
 
+    def test_timeout_parameter_is_stored(self, sample_argument: Argument) -> None:
+        """Custom timeout is passed through to the policy instance."""
+        from difficult_dialogs.policy import WebhookPolicy
+        policy = WebhookPolicy(
+            sample_argument,
+            webhook_url="http://example.com/hook",
+            timeout=0.5,
+        )
+        assert policy.timeout == 0.5
+
+    def test_timeout_triggers_fallback(self, sample_argument: Argument) -> None:
+        """An unreachable endpoint with short timeout falls back gracefully."""
+        from difficult_dialogs.policy import WebhookPolicy
+        policy = WebhookPolicy(
+            sample_argument,
+            webhook_url="http://192.0.2.1:1/hook",  # RFC 5737 TEST-NET — unroutable
+            timeout=0.1,
+        )
+        policy.start()
+        response = policy.handle_input("hello")
+        # Should get a fallback response, not hang or crash
+        assert response is not None
+
 
 # ---------------------------------------------------------------------------
 # Coverage gap: _peek_next_statement with active current_premise
