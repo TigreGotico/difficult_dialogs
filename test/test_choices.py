@@ -1,9 +1,12 @@
 """Tests for difficult_dialogs.choices module."""
 import pytest
+from unittest.mock import MagicMock
 
 from difficult_dialogs.choices import (
     ChoiceOption,
     _DefaultChoiceSolver,
+    _OPMChoiceSolverAdapter,
+    _load_opm_solver,
     parse_choice,
     parse_choices_file,
 )
@@ -162,3 +165,78 @@ class TestParseChoicesFile:
 
     def test_empty_file(self) -> None:
         assert parse_choices_file("") == []
+
+
+# ---------------------------------------------------------------------------
+# _OPMChoiceSolverAdapter — semantic fallback path
+# ---------------------------------------------------------------------------
+
+class TestOPMChoiceSolverAdapter:
+    """Exercise lines 226-240: OPM select_answer semantic fallback."""
+
+    def _options(self) -> list[ChoiceOption]:
+        return [
+            ChoiceOption(label="A", text="I agree completely"),
+            ChoiceOption(label="B", text="I disagree", outcome="disagree"),
+        ]
+
+    def test_opm_fallback_returns_matched_option(self) -> None:
+        """When offline matcher fails, OPM solver index is used."""
+        mock_opm = MagicMock()
+        mock_opm.select_answer.return_value = 1  # index of "I disagree"
+        adapter = _OPMChoiceSolverAdapter(mock_opm)
+        opts = self._options()
+        # Use free-text that won't match offline labels
+        result = adapter.match_choice("that's wrong", opts, "en-US")
+        assert result is not None
+        assert result.label == "B"
+        mock_opm.select_answer.assert_called_once()
+
+    def test_opm_fallback_invalid_index_returns_none(self) -> None:
+        """OPM returns out-of-range index → None."""
+        mock_opm = MagicMock()
+        mock_opm.select_answer.return_value = 99
+        adapter = _OPMChoiceSolverAdapter(mock_opm)
+        result = adapter.match_choice("random text", self._options(), "en-US")
+        assert result is None
+
+    def test_opm_fallback_exception_returns_none(self) -> None:
+        """OPM solver raises → logged warning, returns None."""
+        mock_opm = MagicMock()
+        mock_opm.select_answer.side_effect = RuntimeError("model crashed")
+        adapter = _OPMChoiceSolverAdapter(mock_opm)
+        result = adapter.match_choice("random text", self._options(), "en-US")
+        assert result is None
+
+    def test_offline_match_takes_priority(self) -> None:
+        """Label match should return before OPM is called."""
+        mock_opm = MagicMock()
+        adapter = _OPMChoiceSolverAdapter(mock_opm)
+        result = adapter.match_choice("A", self._options(), "en-US")
+        assert result is not None
+        assert result.label == "A"
+        mock_opm.select_answer.assert_not_called()
+
+
+class TestOPMLoaderEdgeCases:
+    """Exercise _load_opm_solver error paths (lines 268-283)."""
+
+    def test_loader_broken_plugin_falls_back(self, monkeypatch) -> None:
+        """A plugin that raises on instantiation → fallback to default solver."""
+        bad_ep = MagicMock()
+        bad_ep.name = "broken-plugin"
+        bad_ep.load.return_value = MagicMock(side_effect=RuntimeError("init failed"))
+        monkeypatch.setattr(
+            "importlib.metadata.entry_points",
+            lambda group: [bad_ep],
+        )
+        solver = _load_opm_solver("broken-plugin")
+        assert isinstance(solver, _DefaultChoiceSolver)
+
+    def test_loader_no_plugins_returns_default(self, monkeypatch) -> None:
+        monkeypatch.setattr(
+            "importlib.metadata.entry_points",
+            lambda group: [],
+        )
+        solver = _load_opm_solver(None)
+        assert isinstance(solver, _DefaultChoiceSolver)

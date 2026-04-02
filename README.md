@@ -37,12 +37,12 @@ Optionally layer an `LLMEnhancedPolicy` on top to rephrase responses at runtime 
 ## Install
 
 ```bash
-uv pip install difficult-dialogs                  # core (zero runtime deps)
+uv pip install difficult-dialogs                  # core + OVOS yes/no solver
 uv pip install "difficult-dialogs[server]"        # + FastAPI REST server
 uv pip install "difficult-dialogs[dev]"           # + pytest, ruff, mypy
 ```
 
-Python 3.10+. No mandatory runtime dependencies.
+Python 3.10+. Requires `ovos-plugin-manager`, `ovos-solver-yes-no-plugin`, `ovos-solver-bm25-plugin`, and `rank-bm25` (all installed automatically).
 
 ---
 

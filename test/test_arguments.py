@@ -265,6 +265,21 @@ class TestArgumentSave:
         assert p2.where == ["Where observed."]
         assert p2.who == ["Dr. Smith"]
 
+    def test_who_survives_save_load_roundtrip(self, tmp_path: Path) -> None:
+        """premise.who must survive a save/load cycle with no data loss."""
+        arg = Argument(name="who_test", intro="I.", conclusion="C.")
+        p = Premise(name="p1")
+        p.add_statement("claim")
+        p.add_who("Dr. Smith")
+        p.add_who("Prof. Jones")
+        arg.add_premise(p)
+
+        dest = arg.save(tmp_path / "who_test")
+        arg2 = Argument().load(dest)
+        p2 = arg2.get_premise("p1")
+        assert p2 is not None
+        assert p2.who == ["Dr. Smith", "Prof. Jones"]
+
     def test_save_without_path_raises_when_no_source_path(self) -> None:
         """save() with no path and no self.path raises ArgumentSaveError."""
         arg = Argument(name="test", intro="I.", conclusion="C.")

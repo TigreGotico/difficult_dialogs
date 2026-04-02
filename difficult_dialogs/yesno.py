@@ -1,16 +1,15 @@
 """Fuzzy yes/no detection for dialog input parsing.
 
-Loads a yes/no solver via the ``opm.agents.yesno`` entry-point group when
-available.  Falls back to a built-in regex solver so the library works
-without any external dependencies.
+Loads a yes/no solver via the ``opm.agents.yesno`` entry-point group.
+Requires ``ovos-plugin-manager`` and at least one yes/no solver plugin
+(e.g. ``ovos-solver-yes-no-plugin``).
 
-Default plugin: ``ovos-solver-yes-no-plugin`` (optional)
+Default plugin: ``ovos-solver-yes-no-plugin``
 """
 from __future__ import annotations
 
 import importlib.metadata
 import logging
-import re
 from typing import Protocol, runtime_checkable
 
 logger = logging.getLogger(__name__)
@@ -30,59 +29,6 @@ class YesNoSolverProtocol(Protocol):
     def match_yes_or_no(self, text: str, lang: str) -> bool | None:
         """Return True (yes), False (no), or None (ambiguous)."""
         ...
-
-
-# ---------------------------------------------------------------------------
-# Built-in regex fallback — works without any external dependency
-# ---------------------------------------------------------------------------
-
-_YES_WORDS = frozenset({
-    "yes", "yeah", "yep", "yup", "agree", "agreed", "correct",
-    "affirmative", "true", "ok", "okay", "sure", "certainly",
-    "absolutely", "right", "indeed", "of course",
-})
-_NO_WORDS = frozenset({
-    "no", "nope", "nah", "disagree", "incorrect", "false",
-    "negative", "wrong", "never",
-})
-_NEGATION_RE = re.compile(
-    r"\b(?:don't|dont|do not|doesn't|doesnt|does not|"
-    r"not|n't|never|no)\b",
-    re.IGNORECASE,
-)
-
-
-class _BuiltinYesNoSolver:
-    """Minimal English-only yes/no solver using regex heuristics.
-
-    Two-pass approach: first check for negation markers that flip polarity,
-    then scan for yes/no keywords right-to-left (last keyword wins).
-    """
-
-    def match_yes_or_no(self, text: str, lang: str = "en-US") -> bool | None:
-        tokens = re.findall(r"[a-z']+", text.lower())
-        if not tokens:
-            return None
-
-        # Collect yes/no keyword hits with positions
-        result: bool | None = None
-        yes_hit = False
-        no_hit = False
-        for tok in tokens:
-            if tok in _YES_WORDS:
-                result = True
-                yes_hit = True
-            elif tok in _NO_WORDS:
-                result = False
-                no_hit = True
-
-        # Only apply negation flip when a positive keyword co-occurs
-        # with a negation marker (e.g. "I don't agree").
-        # Don't flip when the only keyword IS the negation ("no", "never").
-        if yes_hit and not no_hit and bool(_NEGATION_RE.search(text)):
-            result = False
-
-        return result
 
 
 # ---------------------------------------------------------------------------
@@ -123,11 +69,11 @@ def _load_solver(plugin_name: str = _DEFAULT_PLUGIN) -> YesNoSolverProtocol:
                 name, exc,
             )
 
-    logger.info(
-        "difficult_dialogs: no OPM yes/no plugin found; using built-in regex solver. "
-        "Install ovos-solver-yes-no-plugin for better accuracy."
+    raise RuntimeError(
+        f"No usable yes/no plugin found in {_ENTRY_POINT_GROUPS}. "
+        f"Install the default: pip install ovos-solver-yes-no-plugin. "
+        f"Available: {list(eps)}"
     )
-    return _BuiltinYesNoSolver()
 
 
 # Module-level singleton — loaded once on first use

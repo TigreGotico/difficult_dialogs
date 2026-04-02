@@ -108,6 +108,10 @@ Default outcomes when no `[outcome]` keyword is present, by positional label:
 | D | clarify |
 | E | skip |
 
+> **Note:** Both A and B default to "agree". If you intend a binary
+> agree/disagree split, add explicit outcome keywords:
+> `A) I agree [agree]` / `B) I disagree [disagree]`.
+
 ### `.on_agree` / `.on_disagree` — Branching edges
 
 Single-line files containing the **name** of the premise to visit next when the

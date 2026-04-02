@@ -911,12 +911,48 @@ class TestCmdDebateWatch:
 
 
 class TestCmdSolversDirect:
-    """Call cmd_solvers() directly."""
+    """Call cmd_solvers() directly — cover all branches."""
 
     def test_solvers_direct_call(self) -> None:
         from difficult_dialogs.cli import cmd_solvers
         rc = cmd_solvers(argparse.Namespace())
-        assert rc in (0, 1)
+        assert rc == 0
+
+    def test_solvers_no_plugins(self, capsys) -> None:
+        """Cover the 'no plugins at all' branch (lines 482-487)."""
+        from difficult_dialogs.cli import cmd_solvers
+        from unittest.mock import patch
+        with patch("difficult_dialogs.yesno.list_solvers", return_value={}), \
+             patch("difficult_dialogs.choices.list_solvers", return_value={}):
+            rc = cmd_solvers(argparse.Namespace())
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert "No solver plugins found" in out
+
+    def test_solvers_with_yesno_only(self, capsys) -> None:
+        """Cover the yesno-populated + choices-empty branch."""
+        from difficult_dialogs.cli import cmd_solvers
+        from unittest.mock import patch
+        with patch("difficult_dialogs.yesno.list_solvers", return_value={"test-yesno": "mod:Cls"}), \
+             patch("difficult_dialogs.choices.list_solvers", return_value={}):
+            rc = cmd_solvers(argparse.Namespace())
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert "YES/NO SOLVERS:" in out
+        assert "test-yesno" in out
+        assert "built-in label matcher" in out
+
+    def test_solvers_with_both(self, capsys) -> None:
+        """Cover both sections populated."""
+        from difficult_dialogs.cli import cmd_solvers
+        from unittest.mock import patch
+        with patch("difficult_dialogs.yesno.list_solvers", return_value={"test-yesno": "m:C"}), \
+             patch("difficult_dialogs.choices.list_solvers", return_value={"test-choice": "m:C2"}):
+            rc = cmd_solvers(argparse.Namespace())
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert "test-yesno" in out
+        assert "test-choice" in out
 
 
 class TestCmdDiffPremises:

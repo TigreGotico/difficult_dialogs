@@ -86,14 +86,13 @@ def test_load_solver_falls_back_to_any_plugin(monkeypatch) -> None:
     assert solver is fallback
 
 
-def test_load_solver_falls_back_to_builtin_when_no_plugins(monkeypatch) -> None:
+def test_load_solver_raises_when_no_plugins(monkeypatch) -> None:
     monkeypatch.setattr(
         "importlib.metadata.entry_points",
         lambda group: [],
     )
-    solver = _load_solver()
-    from difficult_dialogs.yesno import _BuiltinYesNoSolver
-    assert isinstance(solver, _BuiltinYesNoSolver)
+    with pytest.raises(RuntimeError, match="opm.agents.yesno"):
+        _load_solver()
 
 
 def test_load_solver_skips_broken_plugin(monkeypatch) -> None:
@@ -152,52 +151,6 @@ def test_is_disagreement_default_false_on_ambiguous() -> None:
 def test_is_disagreement_default_true_on_ambiguous() -> None:
     set_solver(_make_solver(None))
     assert is_disagreement("whatever", default=True) is True
-
-
-# ---------------------------------------------------------------------------
-# _BuiltinYesNoSolver — regex fallback
-# ---------------------------------------------------------------------------
-
-class TestBuiltinSolver:
-    """Test the built-in regex yes/no solver directly."""
-
-    @pytest.fixture(autouse=True)
-    def solver(self):
-        from difficult_dialogs.yesno import _BuiltinYesNoSolver
-        self.s = _BuiltinYesNoSolver()
-
-    def test_yes(self) -> None:
-        assert self.s.match_yes_or_no("yes", "en-US") is True
-
-    def test_no(self) -> None:
-        assert self.s.match_yes_or_no("no", "en-US") is False
-
-    def test_agree(self) -> None:
-        assert self.s.match_yes_or_no("I agree", "en-US") is True
-
-    def test_disagree(self) -> None:
-        assert self.s.match_yes_or_no("I disagree", "en-US") is False
-
-    def test_dont_agree(self) -> None:
-        assert self.s.match_yes_or_no("I don't agree", "en-US") is False
-
-    def test_absolutely(self) -> None:
-        assert self.s.match_yes_or_no("absolutely", "en-US") is True
-
-    def test_never(self) -> None:
-        assert self.s.match_yes_or_no("never", "en-US") is False
-
-    def test_correct(self) -> None:
-        assert self.s.match_yes_or_no("correct", "en-US") is True
-
-    def test_wrong(self) -> None:
-        assert self.s.match_yes_or_no("wrong", "en-US") is False
-
-    def test_empty(self) -> None:
-        assert self.s.match_yes_or_no("", "en-US") is None
-
-    def test_ambiguous(self) -> None:
-        assert self.s.match_yes_or_no("hmm let me think", "en-US") is None
 
 
 # ---------------------------------------------------------------------------
