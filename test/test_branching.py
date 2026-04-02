@@ -3,6 +3,7 @@ import pytest
 
 from difficult_dialogs.arguments import Argument
 from difficult_dialogs.builder import ArgumentBuilder
+from difficult_dialogs.policy import KnowItAllPolicy
 from difficult_dialogs.premises import Premise
 
 
@@ -146,6 +147,50 @@ class TestFileBased:
         assert len(p1.choices) == 2
         assert p1.choices[0].next_premise == "p_yes"
         assert p1.choices[1].next_premise == "p_no"
+
+
+class TestEntryPointSeeding:
+    """Verify that BasePolicy.start() seeds from argument.entry_point."""
+
+    def test_entry_point_skips_first_premise(self) -> None:
+        """When entry_point names the second premise, dialog must start there."""
+        arg = (
+            ArgumentBuilder("ep_test")
+            .intro("Welcome.")
+            .conclusion("Done.")
+            .entry_point("p2")
+            .premise("p1").statement("First premise text.").done()
+            .premise("p2").statement("Second premise text.").done()
+            .build()
+        )
+        policy = KnowItAllPolicy(arg)
+        intro = policy.start()
+        assert intro == "Welcome."
+        assert policy.state.current_premise == "p2"
+
+        # First handle_input should present p2, not p1
+        response = policy.handle_input("yes")
+        assert response is not None
+        assert "Second premise text." in response
+        assert "First premise text." not in response
+
+    def test_no_entry_point_starts_at_first_premise(self) -> None:
+        """Without entry_point, dialog starts at insertion-order first premise."""
+        arg = (
+            ArgumentBuilder("no_ep")
+            .intro("Welcome.")
+            .conclusion("Done.")
+            .premise("p1").statement("First premise text.").done()
+            .premise("p2").statement("Second premise text.").done()
+            .build()
+        )
+        policy = KnowItAllPolicy(arg)
+        policy.start()
+        assert policy.state.current_premise is None
+
+        response = policy.handle_input("yes")
+        assert response is not None
+        assert "First premise text." in response
 
 
 class TestSaveRoundTrip:

@@ -1,10 +1,33 @@
-# Status — Multiple Choice + Branching
+# Status: difficult_dialogs Roadmap
 
-- [x] Step 1: Create `difficult_dialogs/choices.py` — ChoiceOption, ChoiceSolverProtocol, parse_choice()
-- [x] Step 2: Update `premises.py` — add choices, on_agree, on_disagree fields + file loading
-- [x] Step 3: Update `arguments.py` — list→dict premises, entry_point, next_premise() graph traversal
-- [x] Step 4: Update `policy.py` — _advance() via next_premise(), add MultiChoicePolicy
-- [x] Step 5: Update `builder.py` — choice(), on_agree(), on_disagree(), entry_point() fluent methods
-- [x] Step 6: Update `__init__.py` — export new symbols
-- [x] Step 7: Write tests — test_choices.py, test_branching.py, test_multichoice_policy.py, test_builder_choices.py
-- [x] Step 8: Update docs — argument-format.md, POLICIES.md, index.md, FAQ.md
+## Checklist
+
+### SHORT TERM — Stability & Correctness (v0.8 patch)
+
+- [x] Verify & test `entry_point` seeding — add regression test with two premises; assert first spoken text matches `entry_point` premise, not insertion-order first
+- [ ] Fix `.who` persistence — add `(premise.who, ".who")` to `_FIELDS` in `arguments.py`; add round-trip test
+- [ ] Fix private attribute access in `MultiChoicePolicy` — replace `self.argument._premises` with public API call
+- [ ] Make `ovos-solver-yes-no-plugin` optional — vendor minimal regex yes/no fallback; demote OPM plugin to optional; fix README
+- [ ] Raise CLI test coverage from 70% → 90% — extract `_run_debate_loop` helper; add tests for watch/transcript paths
+- [ ] Add cycle-detection to `ArgumentValidator` — DFS on `on_agree`/`on_disagree`; report as CRITICAL; add test
+- [ ] Document `entry_point` in `docs/argument-format.md` and `FAQ.md`
+
+### MEDIUM TERM — DX & Publishability (v0.9)
+
+- [ ] Publish to PyPI — align org name, run release workflow, tag v0.9.0
+- [ ] OPM choice-solver auto-discovery — mirror `yesno._load_solver()` in `choices.py`; update `did solvers` output
+- [ ] `ArgumentBuilder.branch()` shorthand — add method, update docs, add tests
+- [ ] Add `timeout` parameter to `WebhookPolicy` — prevent hang on dead endpoints; add test
+- [ ] Latency benchmark script — `scripts/benchmark.py`; 100 turns × 14 policies; print p50/p95
+
+### LONG TERM — Stable API & Ecosystem (v1.0+)
+
+- [ ] Stable 1.0 API guarantee — audit `__all__`, add `DeprecationWarning` to removed symbols, write migration guide
+- [ ] High-level `ArgumentDiff` / `ArgumentMerge` UX — expose as top-level functions; add `did merge` CLI subcommand; add docs and tests
+- [ ] Voice integration guide — `docs/OVOS_INTEGRATION.md`; example skill in `examples/ovos_skill.py`
+- [ ] RAG / retrieval layer — `ArgumentLibrary.retrieve(query, top_k)` across premises; optional dep on `rank_bm25` or embeddings
+- [ ] LMS / classroom export — `export_to_scorm()` or self-contained HTML debate exercise
+
+## Blockers
+
+<!-- populated by /implement-task if something is stuck -->
