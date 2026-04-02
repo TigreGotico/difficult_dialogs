@@ -15,7 +15,7 @@
 ### MEDIUM TERM — DX & Publishability (v0.9)
 
 - [ ] Publish to PyPI — align org name, run release workflow, tag v0.9.0
-- [ ] OPM choice-solver auto-discovery — mirror `yesno._load_solver()` in `choices.py`; update `did solvers` output
+- [x] OPM choice-solver auto-discovery — already implemented; updated `did solvers` to show both yes/no and choice solver sections
 - [ ] `ArgumentBuilder.branch()` shorthand — add method, update docs, add tests
 - [ ] Add `timeout` parameter to `WebhookPolicy` — prevent hang on dead endpoints; add test
 - [ ] Latency benchmark script — `scripts/benchmark.py`; 100 turns × 14 policies; print p50/p95

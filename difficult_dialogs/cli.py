@@ -472,24 +472,35 @@ def cmd_diff(args: argparse.Namespace) -> int:
 
 
 def cmd_solvers(args: argparse.Namespace) -> int:
-    """List available yes/no solver plugins."""
-    import importlib.metadata
-    from difficult_dialogs.yesno import _ENTRY_POINT_GROUPS, _DEFAULT_PLUGIN
+    """List available yes/no and choice solver plugins."""
+    from difficult_dialogs.yesno import list_solvers as list_yesno_solvers
+    from difficult_dialogs.choices import list_solvers as list_choice_solvers
 
-    eps: dict[str, importlib.metadata.EntryPoint] = {}
-    for group in _ENTRY_POINT_GROUPS:
-        for ep in importlib.metadata.entry_points(group=group):
-            eps.setdefault(ep.name, ep)
+    yesno = list_yesno_solvers()
+    choices = list_choice_solvers()
 
-    if not eps:
-        print(f"No yes/no solver plugins found in entry-point groups: {_ENTRY_POINT_GROUPS}")
-        print(f"Install the default: pip install {_DEFAULT_PLUGIN}")
-        return 1
+    if not yesno and not choices:
+        print("No solver plugins found.")
+        print("  Yes/no:  pip install ovos-solver-yes-no-plugin")
+        print("  Choice:  pip install ovos-solver-bm25-plugin")
+        print("\nBuilt-in fallback solvers are active for both.")
+        return 0
 
-    print(f"Available yes/no solvers ({', '.join(_ENTRY_POINT_GROUPS)}):")
-    for name, ep in sorted(eps.items()):
-        marker = " [default]" if name == _DEFAULT_PLUGIN else ""
-        print(f"  {name}{marker}  ({ep.value})")
+    print("YES/NO SOLVERS:")
+    if yesno:
+        for name, value in sorted(yesno.items()):
+            print(f"  {name}  ({value})")
+    else:
+        print("  (none — built-in regex fallback active)")
+    print()
+
+    print("CHOICE SOLVERS:")
+    if choices:
+        for name, value in sorted(choices.items()):
+            print(f"  {name}  ({value})")
+    else:
+        print("  (none — built-in label matcher active)")
+
     return 0
 
 
