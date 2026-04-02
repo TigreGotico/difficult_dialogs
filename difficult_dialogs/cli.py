@@ -196,8 +196,13 @@ def cmd_export(args: argparse.Namespace) -> int:
                 print(f"  Avg validation score: {stats['validation']['average_score']:.2f}")
         
         db.close()
+    elif format_type == "csv":
+        from difficult_dialogs.export.csv import export_library_to_csv
+        result_path = export_library_to_csv(input_path, output_path)
+        print(f"✓ Exported to {result_path}")
+
     else:
-        print(f"❌ Error: Unknown format '{format_type}'. Use 'json' or 'sqlite'.")
+        print(f"❌ Error: Unknown format '{format_type}'. Use 'json', 'sqlite', or 'csv'.")
         return 1
     
     return 0
@@ -859,7 +864,7 @@ def main() -> int:
     )
     exp_parser.add_argument(
         "-f", "--format",
-        choices=["json", "sqlite", "db"],
+        choices=["json", "sqlite", "db", "csv"],
         help="Export format (auto-detected from extension if not specified)"
     )
     exp_parser.add_argument(
