@@ -1,32 +1,17 @@
-# Status: difficult_dialogs Roadmap
+# Status: Visualization, Graph Export & Library Improvements
 
 ## Checklist
 
-### SHORT TERM — Stability & Correctness (v0.8 patch)
-
-- [x] Verify & test `entry_point` seeding — add regression test with two premises; assert first spoken text matches `entry_point` premise, not insertion-order first
-- [x] Fix `.who` persistence — already fixed in prior commit; added round-trip assertion to test_save_load_roundtrip
-- [x] Fix private attribute access in `MultiChoicePolicy` — already fixed in prior commits; no `_premises` access in policy.py
-- [x] Make `ovos-solver-yes-no-plugin` optional — added _BuiltinYesNoSolver regex fallback; demoted to [ovos] extra; removed unused requests dep
-- [x] Raise CLI test coverage from 70% → 90% — added 13 new CLI tests; fixed ValidationSeverity comparison bug and ArgumentBuilder kwargs bug
-- [x] Add cycle-detection to `ArgumentValidator` — already implemented; added diamond-graph false-positive test
-- [x] Document `entry_point` in `docs/argument-format.md` (already present) and `FAQ.md` (added Q&A with builder example)
-
-### MEDIUM TERM — DX & Publishability (v0.9)
-
-- [ ] Publish to PyPI — BLOCKED: org name conflict (tigregotico vs JarbasAl) must be resolved by human owner
-- [x] OPM choice-solver auto-discovery — already implemented; updated `did solvers` to show both yes/no and choice solver sections
-- [x] `ArgumentBuilder.branch()` shorthand — already implemented and tested in builder.py + test_builder_choices.py
-- [x] Add `timeout` parameter to `WebhookPolicy` — already implemented; added 2 tests for timeout storage and fallback behavior
-- [x] Latency benchmark script — `scripts/benchmark.py`; 100 turns × 11 policies; p50 all under 5 µs
-
-### LONG TERM — Stable API & Ecosystem (v1.0+)
-
-- [ ] Stable 1.0 API guarantee — audit `__all__`, add `DeprecationWarning` to removed symbols, write migration guide
-- [ ] High-level `ArgumentDiff` / `ArgumentMerge` UX — expose as top-level functions; add `did merge` CLI subcommand; add docs and tests
-- [ ] Voice integration guide — `docs/OVOS_INTEGRATION.md`; example skill in `examples/ovos_skill.py`
-- [ ] RAG / retrieval layer — `ArgumentLibrary.retrieve(query, top_k)` across premises; optional dep on `rank_bm25` or embeddings
-- [ ] LMS / classroom export — `export_to_scorm()` or self-contained HTML debate exercise
+- [x] Extract graph data model — `GraphData`, `GraphNode`, `GraphEdge` in `difficult_dialogs/graph.py`; add `Argument.to_graph()` method
+- [ ] Add Mermaid, DOT, and JSON renderers — `difficult_dialogs/export/graph.py` with `to_mermaid()`, `to_dot()`, `to_graph_json()`
+- [ ] Add `did graph` CLI command — `cmd_graph()` with `--format mermaid|dot|json` and `--output FILE`
+- [ ] Add `did stats` CLI command — `cmd_stats()` showing premise/statement/edge counts, depth, branching factor
+- [ ] Add CSV export — `difficult_dialogs/export/csv.py` with `export_to_csv()` and `export_library_to_csv()`; wire into `did export --format csv`
+- [ ] Add timestamp to TranscriptEntry — `timestamp: float | None` field; populate in `start()`/`respond()`/`run_sync()`; update serialization and transcript export
+- [ ] Add CooperativePolicy — new policy class; acknowledges disagreement, seeks common ground, moves forward; register in POLICY_REGISTRY
+- [ ] Export new symbols from `__init__.py` — graph types, CSV export, CooperativePolicy added to `__all__`
+- [ ] Tests for all new features — `test_graph.py`, `test_csv_export.py`, `test_cooperative_policy.py`, timestamp tests, CLI graph/stats tests
+- [ ] Update docs and FAQ — `did graph`/`did stats` in cli.md; graph export in argument-format.md; FAQ entries for visualization and CSV
 
 ## Blockers
 

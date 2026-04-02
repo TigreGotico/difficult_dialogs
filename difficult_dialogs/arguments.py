@@ -157,6 +157,17 @@ class Argument:
         next_idx = idx + 1
         return names[next_idx] if next_idx < len(names) else None
     
+    def to_graph(self) -> "GraphData":
+        """Extract the directed graph structure of this argument.
+
+        Returns:
+            A :class:`~difficult_dialogs.graph.GraphData` instance with
+            nodes (premises), edges (agree/disagree/choice/linear), and
+            the optional entry point.
+        """
+        from difficult_dialogs.graph import build_graph
+        return build_graph(self)
+
     def load(self, path: str | Path) -> Argument:
         """Load argument from a directory structure.
 
