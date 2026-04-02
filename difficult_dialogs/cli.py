@@ -368,7 +368,7 @@ def cmd_score(args: argparse.Namespace) -> int:
     if not result.passed:
         from difficult_dialogs.validators import ValidationSeverity
         for issue in result.issues:
-            if issue.severity >= ValidationSeverity.ERROR:
+            if issue.severity in (ValidationSeverity.ERROR, ValidationSeverity.CRITICAL):
                 print(f"   {issue.severity.name}: {issue.message}")
     return 0 if result.passed else 2
 
@@ -581,7 +581,7 @@ def cmd_new(args: argparse.Namespace) -> int:
         intro = input("Opening statement / intro: ").strip()
         conclusion = input("Conclusion (what you want the user to accept): ").strip()
 
-        builder = ArgumentBuilder(name=name, intro=intro, conclusion=conclusion)
+        builder = ArgumentBuilder(name=name).intro(intro).conclusion(conclusion)
 
         print("\nNow add premises. Each premise is one key reason that supports your conclusion.")
         print("Enter an empty premise name to finish.\n")

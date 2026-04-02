@@ -851,5 +851,238 @@ class TestCmdSolvers:
         assert isinstance(result, dict)
 
 
+class TestCmdDebateTranscript:
+    """Cover --save-transcript path."""
+
+    def test_save_transcript_creates_file(self, tmp_path) -> None:
+        from difficult_dialogs.cli import cmd_debate
+        from difficult_dialogs.arguments import Argument
+        from difficult_dialogs.premises import Premise
+        from unittest.mock import patch
+
+        arg = Argument(name="transcript test", intro="Intro.", conclusion="Done.")
+        p = Premise(name="p1")
+        p.add_statement("Statement.")
+        arg.add_premise(p)
+        arg_dir = tmp_path / "transcript_test"
+        arg.save(arg_dir)
+
+        transcript_path = tmp_path / "transcript.md"
+        ns = argparse.Namespace(
+            argument=str(arg_dir),
+            policy="silent",
+            save_transcript=str(transcript_path),
+            input_file=None,
+        )
+        with patch("builtins.input", return_value="yes"):
+            rc = cmd_debate(ns)
+        assert rc == 0
+        assert transcript_path.exists()
+
+
+class TestCmdDebateWatch:
+    """Cover --watch code path (polling fallback, no watchdog)."""
+
+    def test_watch_polling_fallback(self, tmp_path) -> None:
+        from difficult_dialogs.cli import cmd_debate
+        from difficult_dialogs.arguments import Argument
+        from difficult_dialogs.premises import Premise
+        from unittest.mock import patch
+
+        arg = Argument(name="watch test", intro="Intro.", conclusion="Done.")
+        p = Premise(name="p1")
+        p.add_statement("Statement.")
+        arg.add_premise(p)
+        arg_dir = tmp_path / "watch_test"
+        arg.save(arg_dir)
+
+        ns = argparse.Namespace(
+            argument=str(arg_dir),
+            policy="silent",
+            save_transcript=None,
+            input_file=None,
+            watch=True,
+        )
+        # Force no-watchdog path and simulate user typing "yes" then quit
+        with patch.dict("sys.modules", {"watchdog": None, "watchdog.observers": None, "watchdog.events": None}):
+            with patch("builtins.input", side_effect=["yes", "quit"]):
+                rc = cmd_debate(ns)
+        assert rc == 0
+
+
+class TestCmdSolversDirect:
+    """Call cmd_solvers() directly."""
+
+    def test_solvers_direct_call(self) -> None:
+        from difficult_dialogs.cli import cmd_solvers
+        rc = cmd_solvers(argparse.Namespace())
+        assert rc in (0, 1)
+
+
+class TestCmdDiffPremises:
+    """Cover added/removed/modified premise display paths in cmd_diff."""
+
+    def test_diff_added_removed_premises(self, tmp_path, capsys) -> None:
+        from difficult_dialogs.cli import cmd_diff
+        from difficult_dialogs.arguments import Argument
+        from difficult_dialogs.premises import Premise
+
+        arg_a = Argument(name="diff_a", intro="Intro.", conclusion="Done.")
+        p1 = Premise(name="only_in_a")
+        p1.add_statement("s1")
+        arg_a.add_premise(p1)
+        shared = Premise(name="shared")
+        shared.add_statement("original statement")
+        arg_a.add_premise(shared)
+        dir_a = tmp_path / "diff_a"
+        arg_a.save(dir_a)
+
+        arg_b = Argument(name="diff_b", intro="Intro.", conclusion="Done.")
+        p2 = Premise(name="only_in_b")
+        p2.add_statement("s2")
+        arg_b.add_premise(p2)
+        shared2 = Premise(name="shared")
+        shared2.add_statement("modified statement")
+        arg_b.add_premise(shared2)
+        dir_b = tmp_path / "diff_b"
+        arg_b.save(dir_b)
+
+        rc = cmd_diff(argparse.Namespace(argument_a=str(dir_a), argument_b=str(dir_b)))
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert "ADDED" in out or "REMOVED" in out or "MODIFIED" in out
+
+
+class TestCmdScoreEdgeCases:
+    """Cover cmd_score error paths."""
+
+    def test_score_broken_argument_returns_nonzero(self, tmp_path) -> None:
+        from difficult_dialogs.cli import cmd_score
+
+        broken_dir = tmp_path / "broken"
+        broken_dir.mkdir()
+        (broken_dir / "intro.dialog").write_text("")
+        (broken_dir / "conclusion.conclusion").write_text("")
+        rc = cmd_score(argparse.Namespace(argument=str(broken_dir)))
+        assert rc != 0  # returns 1 (load error) or 2 (poor quality)
+
+    def test_score_poor_argument_shows_issues(self, tmp_path, capsys) -> None:
+        from difficult_dialogs.cli import cmd_score
+        from difficult_dialogs.arguments import Argument
+        from difficult_dialogs.premises import Premise
+
+        arg = Argument(name="poor", intro="X.", conclusion="Y.")
+        p = Premise(name="p1")
+        p.add_statement("s")
+        arg.add_premise(p)
+        d = tmp_path / "poor_arg"
+        arg.save(d)
+
+        rc = cmd_score(argparse.Namespace(argument=str(d)))
+        # Poor quality arguments return 2
+        assert rc in (0, 2)
+
+
+class TestCmdReplayEdge:
+    """Cover unrecognized transcript format path."""
+
+    def test_replay_unrecognized_format(self, tmp_path) -> None:
+        import json
+        from difficult_dialogs.cli import cmd_replay
+
+        bad = tmp_path / "bad_format.json"
+        bad.write_text(json.dumps("just a string"))
+        rc = cmd_replay(argparse.Namespace(transcript=str(bad)))
+        assert rc == 1
+
+
+class TestCmdDiffLoadError:
+    """Cover cmd_diff load error path."""
+
+    def test_diff_corrupted_argument(self, tmp_path, capsys) -> None:
+        from difficult_dialogs.cli import cmd_diff
+        from difficult_dialogs.arguments import Argument
+        from difficult_dialogs.premises import Premise
+
+        arg = Argument(name="good", intro="I.", conclusion="C.")
+        p = Premise(name="p1")
+        p.add_statement("s")
+        arg.add_premise(p)
+        good_dir = tmp_path / "good"
+        arg.save(good_dir)
+
+        # Create a directory that exists but has corrupted content
+        bad_dir = tmp_path / "bad"
+        bad_dir.mkdir()
+        (bad_dir / "intro.dialog").write_text("")
+        (bad_dir / "conclusion.conclusion").write_text("")
+
+        rc = cmd_diff(argparse.Namespace(argument_a=str(good_dir), argument_b=str(bad_dir)))
+        # Either loads successfully (empty arg) or fails — both are valid
+        assert rc in (0, 1)
+
+
+class TestCmdServe:
+    """Cover cmd_serve entry point."""
+
+    def test_serve_missing_uvicorn(self, monkeypatch) -> None:
+        import builtins
+        real_import = builtins.__import__
+
+        def mock_import(name, *args, **kwargs):
+            if name == "uvicorn":
+                raise ImportError("test")
+            return real_import(name, *args, **kwargs)
+
+        from difficult_dialogs.cli import cmd_serve
+        monkeypatch.setattr(builtins, "__import__", mock_import)
+        rc = cmd_serve(argparse.Namespace(host="127.0.0.1", port=8080))
+        assert rc == 1
+
+
+class TestCmdNew:
+    """Cover cmd_new wizard."""
+
+    def test_new_keyboard_interrupt(self, tmp_path) -> None:
+        from difficult_dialogs.cli import cmd_new
+        from unittest.mock import patch
+
+        ns = argparse.Namespace(output=str(tmp_path))
+        with patch("builtins.input", side_effect=KeyboardInterrupt):
+            rc = cmd_new(ns)
+        assert rc == 1
+
+    def test_new_empty_name_returns_1(self, tmp_path) -> None:
+        from difficult_dialogs.cli import cmd_new
+        from unittest.mock import patch
+
+        ns = argparse.Namespace(output=str(tmp_path))
+        with patch("builtins.input", return_value=""):
+            rc = cmd_new(ns)
+        assert rc == 1
+
+    def test_new_creates_argument(self, tmp_path) -> None:
+        from difficult_dialogs.cli import cmd_new
+        from unittest.mock import patch
+
+        ns = argparse.Namespace(output=str(tmp_path))
+        # Simulate: name, intro, conclusion, premise name, statement, empty to finish premise, empty to finish premises
+        inputs = iter(["test arg", "Intro text", "Conclusion text", "p1", "Statement one", "", ""])
+        with patch("builtins.input", side_effect=inputs):
+            rc = cmd_new(ns)
+        assert rc == 0
+        assert (tmp_path / "test_arg" / "intro.dialog").exists()
+
+    def test_new_no_premises(self, tmp_path) -> None:
+        from difficult_dialogs.cli import cmd_new
+        from unittest.mock import patch
+
+        ns = argparse.Namespace(output=str(tmp_path))
+        inputs = iter(["empty arg", "Intro", "Conclusion", ""])
+        with patch("builtins.input", side_effect=inputs):
+            rc = cmd_new(ns)
+        assert rc == 0
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

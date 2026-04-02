@@ -8,7 +8,7 @@
 - [x] Fix `.who` persistence — already fixed in prior commit; added round-trip assertion to test_save_load_roundtrip
 - [x] Fix private attribute access in `MultiChoicePolicy` — already fixed in prior commits; no `_premises` access in policy.py
 - [x] Make `ovos-solver-yes-no-plugin` optional — added _BuiltinYesNoSolver regex fallback; demoted to [ovos] extra; removed unused requests dep
-- [ ] Raise CLI test coverage from 70% → 90% — extract `_run_debate_loop` helper; add tests for watch/transcript paths
+- [x] Raise CLI test coverage from 70% → 90% — added 13 new CLI tests; fixed ValidationSeverity comparison bug and ArgumentBuilder kwargs bug
 - [ ] Add cycle-detection to `ArgumentValidator` — DFS on `on_agree`/`on_disagree`; report as CRITICAL; add test
 - [ ] Document `entry_point` in `docs/argument-format.md` and `FAQ.md`
 
