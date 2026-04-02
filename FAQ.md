@@ -112,6 +112,19 @@ economic_impacts
 ```
 Or via the builder: `PremiseBuilder.on_agree("economic_impacts")`. The argument becomes a directed graph; existing arguments without these files remain linear.
 
+**Q: How do I start a non-linear argument at a specific premise instead of the first one?**
+A: Set `entry_point` on the argument to the name of the premise you want to start at:
+```python
+arg = (
+    ArgumentBuilder("topic")
+    .entry_point("second_premise")
+    .premise("first_premise").statement("...").done()
+    .premise("second_premise").statement("...").done()
+    .build()
+)
+```
+`BasePolicy.start()` reads `argument.entry_point` and seeds `state.current_premise` from it. Without `entry_point`, the dialog starts at the insertion-order first premise.
+
 **Q: What happens if `on_agree` points to a premise that doesn't exist?**
 A: `Argument.next_premise()` returns `None` — the policy will end the dialog. Always validate argument graphs with `did validate` or `ArgumentValidator`.
 

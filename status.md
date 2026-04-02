@@ -10,7 +10,7 @@
 - [x] Make `ovos-solver-yes-no-plugin` optional — added _BuiltinYesNoSolver regex fallback; demoted to [ovos] extra; removed unused requests dep
 - [x] Raise CLI test coverage from 70% → 90% — added 13 new CLI tests; fixed ValidationSeverity comparison bug and ArgumentBuilder kwargs bug
 - [x] Add cycle-detection to `ArgumentValidator` — already implemented; added diamond-graph false-positive test
-- [ ] Document `entry_point` in `docs/argument-format.md` and `FAQ.md`
+- [x] Document `entry_point` in `docs/argument-format.md` (already present) and `FAQ.md` (added Q&A with builder example)
 
 ### MEDIUM TERM — DX & Publishability (v0.9)
 
