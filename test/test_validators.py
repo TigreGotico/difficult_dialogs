@@ -731,6 +731,23 @@ class TestGraphValidation:
         critical = [i for i in result.issues if i.severity == ValidationSeverity.CRITICAL and i.category == "graph"]
         assert critical
 
+    def test_diamond_graph_no_false_positive(self) -> None:
+        """Diamond-shaped graph (two paths to same leaf) must NOT report a cycle."""
+        from difficult_dialogs.builder import ArgumentBuilder
+        arg = (
+            ArgumentBuilder("diamond")
+            .intro("A" * 60)
+            .conclusion("B" * 60)
+            .premise("root").statement("s").on_agree("left").on_disagree("right").done()
+            .premise("left").statement("s").on_agree("leaf").done()
+            .premise("right").statement("s").on_agree("leaf").done()
+            .premise("leaf").statement("s").done()
+            .build()
+        )
+        result = ArgumentValidator().validate(arg)
+        critical = [i for i in result.issues if i.severity == ValidationSeverity.CRITICAL and i.category == "graph"]
+        assert critical == [], f"False positive cycle detection on diamond graph: {critical}"
+
     def test_no_branching_arg_passes_graph_check(self) -> None:
         """Flat arguments with no graph edges pass silently."""
         from difficult_dialogs.builder import ArgumentBuilder

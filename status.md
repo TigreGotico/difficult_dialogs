@@ -9,7 +9,7 @@
 - [x] Fix private attribute access in `MultiChoicePolicy` — already fixed in prior commits; no `_premises` access in policy.py
 - [x] Make `ovos-solver-yes-no-plugin` optional — added _BuiltinYesNoSolver regex fallback; demoted to [ovos] extra; removed unused requests dep
 - [x] Raise CLI test coverage from 70% → 90% — added 13 new CLI tests; fixed ValidationSeverity comparison bug and ArgumentBuilder kwargs bug
-- [ ] Add cycle-detection to `ArgumentValidator` — DFS on `on_agree`/`on_disagree`; report as CRITICAL; add test
+- [x] Add cycle-detection to `ArgumentValidator` — already implemented; added diamond-graph false-positive test
 - [ ] Document `entry_point` in `docs/argument-format.md` and `FAQ.md`
 
 ### MEDIUM TERM — DX & Publishability (v0.9)
