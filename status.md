@@ -5,7 +5,7 @@
 ### SHORT TERM — Stability & Correctness (v0.8 patch)
 
 - [x] Verify & test `entry_point` seeding — add regression test with two premises; assert first spoken text matches `entry_point` premise, not insertion-order first
-- [ ] Fix `.who` persistence — add `(premise.who, ".who")` to `_FIELDS` in `arguments.py`; add round-trip test
+- [x] Fix `.who` persistence — already fixed in prior commit; added round-trip assertion to test_save_load_roundtrip
 - [ ] Fix private attribute access in `MultiChoicePolicy` — replace `self.argument._premises` with public API call
 - [ ] Make `ovos-solver-yes-no-plugin` optional — vendor minimal regex yes/no fallback; demote OPM plugin to optional; fix README
 - [ ] Raise CLI test coverage from 70% → 90% — extract `_run_debate_loop` helper; add tests for watch/transcript paths

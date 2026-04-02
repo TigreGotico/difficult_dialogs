@@ -249,6 +249,7 @@ class TestArgumentSave:
         p.add_what("What this means.")
         p.add_when("When this applies.")
         p.add_where("Where observed.")
+        p.add_who("Dr. Smith")
         arg.add_premise(p)
 
         dest = arg.save(tmp_path / "roundtrip")
@@ -262,6 +263,7 @@ class TestArgumentSave:
         assert p2.what == ["What this means."]
         assert p2.when == ["When this applies."]
         assert p2.where == ["Where observed."]
+        assert p2.who == ["Dr. Smith"]
 
     def test_save_without_path_raises_when_no_source_path(self) -> None:
         """save() with no path and no self.path raises ArgumentSaveError."""
