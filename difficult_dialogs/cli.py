@@ -576,6 +576,125 @@ def cmd_serve(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_graph(args: argparse.Namespace) -> int:
+    """Render the premise graph of an argument."""
+    from difficult_dialogs.arguments import Argument
+    from difficult_dialogs.export.graph import to_mermaid, to_dot, to_graph_json
+    import json as _json
+
+    arg_path = Path(args.argument)
+    if not arg_path.exists():
+        print(f"❌ Error: Argument not found: {arg_path}")
+        return 1
+
+    try:
+        argument = Argument.from_directory(arg_path)
+    except Exception as exc:
+        print(f"❌ Error loading argument: {exc}")
+        return 1
+
+    graph = argument.to_graph()
+    fmt = getattr(args, "format", "mermaid")
+
+    if fmt == "dot":
+        output = to_dot(graph)
+    elif fmt == "json":
+        output = _json.dumps(to_graph_json(graph), indent=2)
+    else:
+        output = to_mermaid(graph)
+
+    if getattr(args, "output", None):
+        Path(args.output).write_text(output)
+        print(f"✓ Graph written to {args.output}")
+    else:
+        print(output, end="")
+
+    return 0
+
+
+def cmd_stats(args: argparse.Namespace) -> int:
+    """Print structural statistics for an argument or library."""
+    from difficult_dialogs.arguments import Argument
+
+    path = Path(args.path)
+    if not path.exists():
+        print(f"❌ Error: Path not found: {path}")
+        return 1
+
+    # Collect arguments: single arg or library root
+    arg_dirs: list[Path] = []
+    if (path / "intro.dialog").exists():
+        arg_dirs.append(path)
+    else:
+        for intro in path.rglob("intro.dialog"):
+            arg_dirs.append(intro.parent)
+
+    if not arg_dirs:
+        print("No arguments found.")
+        return 1
+
+    total_premises = 0
+    total_statements = 0
+    total_edges = 0
+    total_choices = 0
+    total_languages: set[str] = set()
+    max_depth = 0
+
+    for d in arg_dirs:
+        try:
+            arg = Argument.from_directory(d)
+        except Exception:
+            continue
+
+        graph = arg.to_graph()
+        total_premises += len(graph.nodes)
+        total_statements += sum(n.statement_count for n in graph.nodes)
+        explicit = [e for e in graph.edges if not e.is_linear_fallback]
+        total_edges += len(explicit)
+        total_choices += sum(1 for n in graph.nodes if n.has_choices)
+
+        # Max depth via BFS
+        if graph.nodes:
+            adj: dict[str, list[str]] = {}
+            for e in graph.edges:
+                adj.setdefault(e.source, []).append(e.target)
+            start = graph.entry_point or graph.nodes[0].name
+            visited: set[str] = set()
+            queue = [(start, 1)]
+            local_max = 0
+            while queue:
+                node, depth = queue.pop(0)
+                if node in visited:
+                    continue
+                visited.add(node)
+                local_max = max(local_max, depth)
+                for neighbour in adj.get(node, []):
+                    if neighbour not in visited:
+                        queue.append((neighbour, depth + 1))
+            max_depth = max(max_depth, local_max)
+
+        # Count translation languages
+        for premise in arg.premises:
+            if hasattr(premise, "translations") and premise.translations:
+                total_languages.update(premise.translations.keys())
+
+    branching_factor = f"{total_edges / total_premises:.1f}" if total_premises else "0"
+
+    print(f"Arguments:    {len(arg_dirs)}")
+    print(f"Premises:     {total_premises}")
+    print(f"Statements:   {total_statements}")
+    print(f"Edges:        {total_edges} (explicit)")
+    print(f"Max depth:    {max_depth}")
+    print(f"Branching:    {branching_factor} edges/premise")
+    print(f"Choices:      {total_choices} premises with choices")
+    if total_languages:
+        print(f"Languages:    {len(total_languages)} ({', '.join(sorted(total_languages))})")
+    else:
+        print(f"Languages:    0")
+
+    return 0
+
+
 def cmd_new(args: argparse.Namespace) -> int:
     """Interactive wizard to create a new argument without an LLM."""
     from difficult_dialogs.builder import ArgumentBuilder
@@ -838,6 +957,41 @@ def main() -> int:
     diff_parser.add_argument("argument_a", help="Path to first argument directory (base)")
     diff_parser.add_argument("argument_b", help="Path to second argument directory (comparison)")
     diff_parser.set_defaults(func=cmd_diff)
+
+    # Graph command
+    graph_parser = subparsers.add_parser(
+        "graph",
+        aliases=["gr"],
+        help="Render the premise graph of an argument (Mermaid, DOT, or JSON)",
+    )
+    graph_parser.add_argument(
+        "argument",
+        help="Path to argument directory",
+    )
+    graph_parser.add_argument(
+        "-f", "--format",
+        choices=["mermaid", "dot", "json"],
+        default="mermaid",
+        help="Output format (default: mermaid)",
+    )
+    graph_parser.add_argument(
+        "-o", "--output",
+        metavar="FILE",
+        help="Write output to file instead of stdout",
+    )
+    graph_parser.set_defaults(func=cmd_graph)
+
+    # Stats command
+    stats_parser = subparsers.add_parser(
+        "stats",
+        aliases=["st"],
+        help="Print structural statistics for an argument or library",
+    )
+    stats_parser.add_argument(
+        "path",
+        help="Path to argument directory or library root",
+    )
+    stats_parser.set_defaults(func=cmd_stats)
 
     # Solvers command
     solvers_parser = subparsers.add_parser(
