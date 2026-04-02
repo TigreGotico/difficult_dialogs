@@ -6,7 +6,7 @@
 
 - [x] Verify & test `entry_point` seeding — add regression test with two premises; assert first spoken text matches `entry_point` premise, not insertion-order first
 - [x] Fix `.who` persistence — already fixed in prior commit; added round-trip assertion to test_save_load_roundtrip
-- [ ] Fix private attribute access in `MultiChoicePolicy` — replace `self.argument._premises` with public API call
+- [x] Fix private attribute access in `MultiChoicePolicy` — already fixed in prior commits; no `_premises` access in policy.py
 - [ ] Make `ovos-solver-yes-no-plugin` optional — vendor minimal regex yes/no fallback; demote OPM plugin to optional; fix README
 - [ ] Raise CLI test coverage from 70% → 90% — extract `_run_debate_loop` helper; add tests for watch/transcript paths
 - [ ] Add cycle-detection to `ArgumentValidator` — DFS on `on_agree`/`on_disagree`; report as CRITICAL; add test
