@@ -1,5 +1,8 @@
-"""Tests for difficult_dialogs.graph — graph data model extraction."""
+"""Tests for difficult_dialogs.graph — graph data model and renderers."""
+import json
+
 from difficult_dialogs.builder import ArgumentBuilder
+from difficult_dialogs.export.graph import to_mermaid, to_dot, to_graph_json
 from difficult_dialogs.graph import GraphData, GraphNode, GraphEdge, build_graph
 
 
@@ -155,3 +158,105 @@ class TestGraphDataSerialization:
         assert d["source"] == "p1"
         assert d["target"] == "p2"
         assert d["label"] == "agree"
+
+
+# ---------------------------------------------------------------------------
+# Mermaid renderer
+# ---------------------------------------------------------------------------
+
+class TestMermaidRenderer:
+    def test_starts_with_graph_td(self):
+        g = _linear_arg().to_graph()
+        assert to_mermaid(g).startswith("graph TD\n")
+
+    def test_linear_shows_all_edges(self):
+        m = to_mermaid(_linear_arg().to_graph())
+        assert "p1 --> p2" in m
+        assert "p2 --> p3" in m
+
+    def test_branching_shows_labels(self):
+        m = to_mermaid(_branching_arg().to_graph())
+        assert '"agree"' in m
+        assert '"disagree"' in m
+
+    def test_branching_omits_fallback_edges(self):
+        m = to_mermaid(_branching_arg().to_graph())
+        # p2a and p2b have no explicit edges; their fallback edges should be hidden
+        # because the graph has explicit edges
+        lines = m.strip().split("\n")
+        edge_lines = [l for l in lines if "-->" in l]
+        # Should only have p1's two explicit edges + fallback for p2a->p2b (p2a has no explicit)
+        assert any('"agree"' in l for l in edge_lines)
+
+    def test_entry_point_styled(self):
+        m = to_mermaid(_entry_point_arg().to_graph())
+        assert "stroke-width:3px" in m
+        assert "p2" in m
+
+    def test_choice_node_is_diamond(self):
+        m = to_mermaid(_choice_arg().to_graph())
+        assert "{" in m  # diamond shape uses {}
+
+    def test_special_chars_in_name(self):
+        arg = (
+            ArgumentBuilder("special")
+            .intro("I.").conclusion("C.")
+            .premise("my premise!").statement("s").done()
+            .build()
+        )
+        m = to_mermaid(arg.to_graph())
+        assert "my_premise_" in m  # sanitized ID
+
+
+# ---------------------------------------------------------------------------
+# DOT renderer
+# ---------------------------------------------------------------------------
+
+class TestDOTRenderer:
+    def test_starts_with_digraph(self):
+        d = to_dot(_linear_arg().to_graph())
+        assert d.startswith("digraph {\n")
+
+    def test_ends_with_closing_brace(self):
+        d = to_dot(_linear_arg().to_graph())
+        assert d.strip().endswith("}")
+
+    def test_contains_edges(self):
+        d = to_dot(_linear_arg().to_graph())
+        assert "p1 -> p2" in d
+
+    def test_branching_labels(self):
+        d = to_dot(_branching_arg().to_graph())
+        assert 'label="agree"' in d
+        assert 'label="disagree"' in d
+
+    def test_entry_point_bold(self):
+        d = to_dot(_entry_point_arg().to_graph())
+        assert "penwidth=3" in d
+
+
+# ---------------------------------------------------------------------------
+# JSON renderer
+# ---------------------------------------------------------------------------
+
+class TestJSONRenderer:
+    def test_has_nodes_and_edges(self):
+        j = to_graph_json(_linear_arg().to_graph())
+        assert "nodes" in j
+        assert "edges" in j
+        assert len(j["nodes"]) == 3
+
+    def test_json_serializable(self):
+        j = to_graph_json(_branching_arg().to_graph())
+        s = json.dumps(j)
+        assert isinstance(s, str)
+
+    def test_entry_point_marker(self):
+        j = to_graph_json(_entry_point_arg().to_graph())
+        entry_nodes = [n for n in j["nodes"] if n.get("is_entry")]
+        assert len(entry_nodes) == 1
+        assert entry_nodes[0]["name"] == "p2"
+
+    def test_no_entry_all_false(self):
+        j = to_graph_json(_linear_arg().to_graph())
+        assert all(not n.get("is_entry") for n in j["nodes"])
