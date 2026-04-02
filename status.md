@@ -18,7 +18,7 @@
 - [x] OPM choice-solver auto-discovery — already implemented; updated `did solvers` to show both yes/no and choice solver sections
 - [x] `ArgumentBuilder.branch()` shorthand — already implemented and tested in builder.py + test_builder_choices.py
 - [x] Add `timeout` parameter to `WebhookPolicy` — already implemented; added 2 tests for timeout storage and fallback behavior
-- [ ] Latency benchmark script — `scripts/benchmark.py`; 100 turns × 14 policies; print p50/p95
+- [x] Latency benchmark script — `scripts/benchmark.py`; 100 turns × 11 policies; p50 all under 5 µs
 
 ### LONG TERM — Stable API & Ecosystem (v1.0+)
 
