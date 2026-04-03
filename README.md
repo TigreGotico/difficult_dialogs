@@ -126,6 +126,36 @@ Full reference: [docs/argument-format.md](docs/argument-format.md)
 
 ---
 
+## Graph visualization
+
+Arguments with branching (`.on_agree`/`.on_disagree`/`.choices`) form directed
+graphs. Visualize with `did graph`:
+
+```bash
+did graph examples/sample_arguments/technology/should_ai_be_regulated
+```
+
+```mermaid
+graph TD
+    ai_risk(["ai_risk\n(2 stmts)"])
+    oversight{"oversight\n(2 stmts)"}
+    innovation["innovation\n(2 stmts)"]
+    balance["balance\n(2 stmts)"]
+    implementation["implementation\n(2 stmts)"]
+    ai_risk -->|"agree"| oversight
+    ai_risk -->|"disagree"| innovation
+    oversight -->|"choice:A"| implementation
+    oversight -->|"choice:B"| balance
+    innovation -->|"agree"| balance
+    innovation -->|"disagree"| oversight
+    style ai_risk stroke-width:3px
+```
+
+Also available as DOT (`--format dot`) and JSON (`--format json`).
+Browse all sample graphs: [docs/GRAPHS.md](docs/GRAPHS.md)
+
+---
+
 ## Policies
 
 Policies are the "personality" of the dialog. The argument content never changes.
@@ -375,7 +405,9 @@ difficult_dialogs/
 - [docs/argument-format.md](docs/argument-format.md) — File format reference
 - [docs/USER_GUIDE.md](docs/USER_GUIDE.md) — End-user manual
 - [docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md) — API reference
-- [docs/POLICIES.md](docs/POLICIES.md) — All 14 policies documented
+- [docs/POLICIES.md](docs/POLICIES.md) — All 15 policies documented
+- [docs/GRAPHS.md](docs/GRAPHS.md) — Premise graphs for all sample arguments
+- [docs/cli.md](docs/cli.md) — CLI reference (`did graph`, `did stats`, `did debate`, …)
 
 ---
 

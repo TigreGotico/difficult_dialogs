@@ -86,6 +86,7 @@ diff = arg.diff(updated_arg)           # {meta, added_premises, removed_premises
 - [POLICIES.md](POLICIES.md) — policy reference (all 10 built-in policies + custom policies)
 - [builder.md](builder.md) — Python API: `ArgumentBuilder`, `Argument.from_directory()`, `validate_argument()`
 - [choice-solver.md](choice-solver.md) — OPM choice solver, offline matcher, `set_solver()`
-- [cli.md](cli.md) — CLI reference (`dd debate`, `dd diff`, `dd replay`, `dd solvers`, …)
+- [cli.md](cli.md) — CLI reference (`did graph`, `did stats`, `did debate`, `did diff`, …)
+- [GRAPHS.md](GRAPHS.md) — Mermaid premise graphs for all sample arguments
 - [USER_GUIDE.md](USER_GUIDE.md) — end-user manual
 - [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md) — developer and integration guide
