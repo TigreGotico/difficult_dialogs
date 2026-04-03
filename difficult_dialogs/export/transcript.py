@@ -51,11 +51,15 @@ def export_transcript_to_markdown(
     if not state.transcript:
         lines.append("*(no turns recorded)*")
     else:
+        from datetime import datetime, timezone
         for entry in state.transcript:
+            ts = ""
+            if entry.timestamp is not None:
+                ts = f" *({datetime.fromtimestamp(entry.timestamp, tz=timezone.utc).isoformat()})*"
             if entry.role == "bot":
-                lines.append(f"**Bot:** {entry.text}")
+                lines.append(f"**Bot:** {entry.text}{ts}")
             else:
-                lines.append(f"**User:** {entry.text}")
+                lines.append(f"**User:** {entry.text}{ts}")
             lines.append("")
 
     lines.append("---")

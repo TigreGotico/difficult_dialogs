@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import random
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, AsyncGenerator, Generator
@@ -26,15 +27,23 @@ class TranscriptEntry:
     """A single turn in the conversation transcript."""
     role: str   # "bot" or "user"
     text: str
+    timestamp: float | None = None
 
-    def to_dict(self) -> dict[str, str]:
+    def to_dict(self) -> dict:
         """Serialise to a plain dict."""
-        return {"role": self.role, "text": self.text}
+        d: dict = {"role": self.role, "text": self.text}
+        if self.timestamp is not None:
+            d["timestamp"] = self.timestamp
+        return d
 
     @classmethod
-    def from_dict(cls, data: dict[str, str]) -> TranscriptEntry:
+    def from_dict(cls, data: dict) -> TranscriptEntry:
         """Restore from a plain dict."""
-        return cls(role=data["role"], text=data["text"])
+        return cls(
+            role=data["role"],
+            text=data["text"],
+            timestamp=data.get("timestamp"),
+        )
 
 
 @dataclass
@@ -137,7 +146,7 @@ class BasePolicy(ABC):
         if self.argument.entry_point:
             self.state.current_premise = self.argument.entry_point
         intro = str(self.argument.intro)
-        self.state.transcript.append(TranscriptEntry(role="bot", text=intro))
+        self.state.transcript.append(TranscriptEntry(role="bot", text=intro, timestamp=time.time()))
         return intro
 
     def end(self) -> str:
@@ -148,7 +157,7 @@ class BasePolicy(ABC):
         """
         self.state.finished = True
         conclusion = str(self.argument.conclusion)
-        self.state.transcript.append(TranscriptEntry(role="bot", text=conclusion))
+        self.state.transcript.append(TranscriptEntry(role="bot", text=conclusion, timestamp=time.time()))
         return conclusion
 
     def progress(self) -> tuple[int, int]:
@@ -176,10 +185,11 @@ class BasePolicy(ABC):
         Returns:
             Response text, or None.
         """
-        self.state.transcript.append(TranscriptEntry(role="user", text=user_input))
+        now = time.time()
+        self.state.transcript.append(TranscriptEntry(role="user", text=user_input, timestamp=now))
         response = self.handle_input(user_input)
         if response:
-            self.state.transcript.append(TranscriptEntry(role="bot", text=response))
+            self.state.transcript.append(TranscriptEntry(role="bot", text=response, timestamp=time.time()))
         return response
     
     def _get_next_statement(self) -> tuple[str, str] | None:
@@ -380,10 +390,10 @@ class BasePolicy(ABC):
             if not response:
                 break
             user_input = yield response
-            self.state.transcript.append(TranscriptEntry(role="user", text=user_input or ""))
+            self.state.transcript.append(TranscriptEntry(role="user", text=user_input or "", timestamp=time.time()))
             response = self.handle_input(user_input or "")
             if response:
-                self.state.transcript.append(TranscriptEntry(role="bot", text=response))
+                self.state.transcript.append(TranscriptEntry(role="bot", text=response, timestamp=time.time()))
             if self.state.finished or response is None:
                 yield self.end()
                 break
