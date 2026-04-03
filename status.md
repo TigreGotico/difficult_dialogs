@@ -8,7 +8,7 @@
 - [x] Add `did stats` CLI command — `cmd_stats()` showing premise/statement/edge counts, depth, branching factor
 - [x] Add CSV export — `difficult_dialogs/export/csv.py` with `export_to_csv()` and `export_library_to_csv()`; wired into `did export --format csv`
 - [x] Add timestamp to TranscriptEntry — `timestamp: float | None` field; populated in start/respond/run_sync/end; serialization and export updated
-- [ ] Add CooperativePolicy — new policy class; acknowledges disagreement, seeks common ground, moves forward; register in POLICY_REGISTRY
+- [x] Add CooperativePolicy — acknowledges disagreement, advances instead of looping; registered in POLICY_REGISTRY as "cooperative"
 - [ ] Export new symbols from `__init__.py` — graph types, CSV export, CooperativePolicy added to `__all__`
 - [ ] Tests for all new features — `test_graph.py`, `test_csv_export.py`, `test_cooperative_policy.py`, timestamp tests, CLI graph/stats tests
 - [ ] Update docs and FAQ — `did graph`/`did stats` in cli.md; graph export in argument-format.md; FAQ entries for visualization and CSV

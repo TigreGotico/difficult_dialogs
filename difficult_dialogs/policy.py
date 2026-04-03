@@ -1717,6 +1717,71 @@ class MultiChoicePolicy(BasePolicy):
         return intro
 
 
+class CooperativePolicy(BasePolicy):
+    """Policy that acknowledges disagreement and seeks common ground.
+
+    Unlike :class:`KnowItAllPolicy` which loops on support/sources when the
+    user disagrees, this policy acknowledges the user's perspective and
+    advances to the next premise.  On repeated disagreement (3+), it uses
+    a summary acknowledgment phrase.
+
+    Best for: building rapport, non-confrontational learning, user-friendly
+    onboarding.
+    """
+
+    _ACKNOWLEDGE = [
+        "I understand your perspective. Let me share another angle.",
+        "That's a fair point. Here's something else to consider.",
+        "I respect that view. Let's look at this from a different side.",
+        "I hear you. Let me present another aspect.",
+    ]
+    _REPEATED = [
+        "We may see this differently, and that's okay. Let's continue.",
+        "We can agree to disagree on that. Moving on.",
+        "Fair enough — let's explore another topic.",
+    ]
+
+    def __init__(self, argument: Argument, lang: str = "en-US") -> None:
+        super().__init__(argument, lang=lang)
+        self._consecutive_disagree = 0
+
+    def handle_input(self, user_input: str) -> str | None:
+        user_input = user_input.strip().lower()
+
+        five_w = self._check_five_w(user_input)
+        if five_w:
+            return five_w
+
+        if is_disagreement(user_input, lang=self.lang):
+            self.disagree()
+            self._consecutive_disagree += 1
+            return self._handle_disagreement()
+
+        self.agree()
+        self._consecutive_disagree = 0
+        return self._advance()
+
+    def _advance(self) -> str | None:
+        result = self._get_next_statement()
+        if result is None:
+            self.state.finished = True
+            return str(self.argument.conclusion)
+        _, statement = result
+        return f"{statement}\nWhat do you think? (yes/no) "
+
+    def _handle_disagreement(self) -> str:
+        if self._consecutive_disagree >= 3:
+            prefix = random.choice(self._REPEATED)
+        else:
+            prefix = random.choice(self._ACKNOWLEDGE)
+
+        advance = self._advance()
+        if advance is None:
+            self.state.finished = True
+            return f"{prefix}\n{self.argument.conclusion}"
+        return f"{prefix}\n{advance}"
+
+
 # Registry mapping lowercase names to policy classes.
 POLICY_REGISTRY: dict[str, type[BasePolicy]] = {
     "knowitall": KnowItAllPolicy,
@@ -1731,6 +1796,7 @@ POLICY_REGISTRY: dict[str, type[BasePolicy]] = {
     "minimalist": MinimalistPolicy,
     "adaptive": AdaptivePolicy,
     "multichoice": MultiChoicePolicy,
+    "cooperative": CooperativePolicy,
     # WebhookPolicy intentionally excluded — requires webhook_url constructor arg
 }
 

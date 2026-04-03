@@ -895,7 +895,7 @@ def main() -> int:
         choices=[
             "knowitall", "silent", "socratic", "debate", "exploratory",
             "maieutic", "skeptic", "teacher", "debater", "minimalist",
-            "adaptive",
+            "adaptive", "cooperative",
         ],
         help="Dialog policy to use (default: knowitall)"
     )
