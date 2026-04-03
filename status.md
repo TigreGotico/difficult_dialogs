@@ -10,7 +10,7 @@
 - [x] Add timestamp to TranscriptEntry — `timestamp: float | None` field; populated in start/respond/run_sync/end; serialization and export updated
 - [x] Add CooperativePolicy — acknowledges disagreement, advances instead of looping; registered in POLICY_REGISTRY as "cooperative"
 - [x] Export new symbols from `__init__.py` — GraphData/Node/Edge, renderers, export_to_csv, CooperativePolicy in `__all__`
-- [ ] Tests for all new features — `test_graph.py`, `test_csv_export.py`, `test_cooperative_policy.py`, timestamp tests, CLI graph/stats tests
+- [x] Tests for all new features — test_graph.py (32), test_csv_export.py (9), test_cooperative_policy.py (10), test_transcript_timestamp.py (9), CLI graph/stats/csv (10)
 - [ ] Update docs and FAQ — `did graph`/`did stats` in cli.md; graph export in argument-format.md; FAQ entries for visualization and CSV
 
 ## Blockers

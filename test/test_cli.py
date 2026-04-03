@@ -1120,5 +1120,114 @@ class TestCmdNew:
         assert rc == 0
 
 
+class TestCmdGraph:
+    """Tests for `did graph`."""
+
+    def _sample_arg(self, tmp_path) -> Path:
+        from difficult_dialogs.arguments import Argument
+        from difficult_dialogs.premises import Premise
+        arg = Argument(name="graph test", intro="I.", conclusion="C.")
+        p = Premise(name="p1")
+        p.add_statement("s1")
+        arg.add_premise(p)
+        d = tmp_path / "graph_test"
+        arg.save(d)
+        return d
+
+    def test_graph_mermaid_default(self, tmp_path, capsys) -> None:
+        from difficult_dialogs.cli import cmd_graph
+        d = self._sample_arg(tmp_path)
+        rc = cmd_graph(argparse.Namespace(argument=str(d), format="mermaid", output=None))
+        assert rc == 0
+        assert "graph TD" in capsys.readouterr().out
+
+    def test_graph_dot_format(self, tmp_path, capsys) -> None:
+        from difficult_dialogs.cli import cmd_graph
+        d = self._sample_arg(tmp_path)
+        rc = cmd_graph(argparse.Namespace(argument=str(d), format="dot", output=None))
+        assert rc == 0
+        assert "digraph" in capsys.readouterr().out
+
+    def test_graph_json_format(self, tmp_path, capsys) -> None:
+        from difficult_dialogs.cli import cmd_graph
+        d = self._sample_arg(tmp_path)
+        rc = cmd_graph(argparse.Namespace(argument=str(d), format="json", output=None))
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert '"nodes"' in out
+
+    def test_graph_output_file(self, tmp_path) -> None:
+        from difficult_dialogs.cli import cmd_graph
+        d = self._sample_arg(tmp_path)
+        out_file = tmp_path / "graph.md"
+        rc = cmd_graph(argparse.Namespace(argument=str(d), format="mermaid", output=str(out_file)))
+        assert rc == 0
+        assert out_file.exists()
+        assert "graph TD" in out_file.read_text()
+
+    def test_graph_nonexistent_path(self) -> None:
+        from difficult_dialogs.cli import cmd_graph
+        rc = cmd_graph(argparse.Namespace(argument="/nonexistent", format="mermaid", output=None))
+        assert rc == 1
+
+
+class TestCmdStats:
+    """Tests for `did stats`."""
+
+    def test_stats_sample_arguments(self, capsys) -> None:
+        from difficult_dialogs.cli import cmd_stats
+        sample = str(Path(__file__).parent.parent / "examples" / "sample_arguments")
+        rc = cmd_stats(argparse.Namespace(path=sample))
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "Premises:" in out
+        assert "Statements:" in out
+
+    def test_stats_single_argument(self, tmp_path, capsys) -> None:
+        from difficult_dialogs.cli import cmd_stats
+        from difficult_dialogs.arguments import Argument
+        from difficult_dialogs.premises import Premise
+        arg = Argument(name="stats test", intro="I.", conclusion="C.")
+        p = Premise(name="p1")
+        p.add_statement("s1")
+        arg.add_premise(p)
+        d = tmp_path / "stats_test"
+        arg.save(d)
+        rc = cmd_stats(argparse.Namespace(path=str(d)))
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "Arguments:    1" in out
+
+    def test_stats_nonexistent_path(self) -> None:
+        from difficult_dialogs.cli import cmd_stats
+        rc = cmd_stats(argparse.Namespace(path="/nonexistent"))
+        assert rc == 1
+
+
+class TestCmdExportCSV:
+    """Test CSV format in did export."""
+
+    def test_export_csv_format(self, tmp_path) -> None:
+        from difficult_dialogs.cli import cmd_export
+        from difficult_dialogs.arguments import Argument
+        from difficult_dialogs.premises import Premise
+        arg = Argument(name="csv cli", intro="I.", conclusion="C.")
+        p = Premise(name="p1")
+        p.add_statement("s1")
+        arg.add_premise(p)
+        arg.save(tmp_path / "csv_arg")
+
+        ns = argparse.Namespace(
+            input=str(tmp_path),
+            output=str(tmp_path / "out.csv"),
+            format="csv",
+            no_validation=True,
+            stats=False,
+        )
+        rc = cmd_export(ns)
+        assert rc == 0
+        assert (tmp_path / "out.csv").exists()
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
