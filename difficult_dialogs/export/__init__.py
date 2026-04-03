@@ -17,6 +17,8 @@ from difficult_dialogs.export.sqlite import (
     LibraryDatabase,
     export_to_sqlite,
 )
+from difficult_dialogs.export.csv import export_to_csv, export_library_to_csv
+from difficult_dialogs.export.graph import to_mermaid, to_dot, to_graph_json
 
 __all__ = [
     "ArgumentEncoder",
@@ -28,4 +30,9 @@ __all__ = [
     "export_transcript_to_json",
     "LibraryDatabase",
     "export_to_sqlite",
+    "export_to_csv",
+    "export_library_to_csv",
+    "to_mermaid",
+    "to_dot",
+    "to_graph_json",
 ]

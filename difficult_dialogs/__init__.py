@@ -16,6 +16,7 @@ from difficult_dialogs.arguments import Argument
 from difficult_dialogs.policy import (
     BasePolicy,
     TranscriptEntry,
+    CooperativePolicy,
     KnowItAllPolicy,
     SilentPolicy,
     SocraticPolicy,
@@ -58,6 +59,9 @@ from difficult_dialogs.export.transcript import (
     export_transcript_to_markdown,
     export_transcript_to_json,
 )
+from difficult_dialogs.export.csv import export_to_csv
+from difficult_dialogs.export.graph import to_mermaid, to_dot, to_graph_json
+from difficult_dialogs.graph import GraphData, GraphNode, GraphEdge
 from difficult_dialogs.llm import ArgumentGenerator, LLMEnhancer, LLMClient
 from difficult_dialogs.version import __version__
 __all__ = [
@@ -91,6 +95,14 @@ __all__ = [
     "LLMEnhancedPolicy",
     "MultiArgumentPolicy",
     "MultiChoicePolicy",
+    "CooperativePolicy",
+    # Graph visualization
+    "GraphData",
+    "GraphNode",
+    "GraphEdge",
+    "to_mermaid",
+    "to_dot",
+    "to_graph_json",
     # Choices
     "ChoiceOption",
     "ChoiceSolverProtocol",
@@ -123,6 +135,8 @@ __all__ = [
     # Transcript export
     "export_transcript_to_markdown",
     "export_transcript_to_json",
+    # CSV export
+    "export_to_csv",
     # LLM integration (optional)
     "ArgumentGenerator",
     "LLMEnhancer",

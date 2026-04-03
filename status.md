@@ -9,7 +9,7 @@
 - [x] Add CSV export — `difficult_dialogs/export/csv.py` with `export_to_csv()` and `export_library_to_csv()`; wired into `did export --format csv`
 - [x] Add timestamp to TranscriptEntry — `timestamp: float | None` field; populated in start/respond/run_sync/end; serialization and export updated
 - [x] Add CooperativePolicy — acknowledges disagreement, advances instead of looping; registered in POLICY_REGISTRY as "cooperative"
-- [ ] Export new symbols from `__init__.py` — graph types, CSV export, CooperativePolicy added to `__all__`
+- [x] Export new symbols from `__init__.py` — GraphData/Node/Edge, renderers, export_to_csv, CooperativePolicy in `__all__`
 - [ ] Tests for all new features — `test_graph.py`, `test_csv_export.py`, `test_cooperative_policy.py`, timestamp tests, CLI graph/stats tests
 - [ ] Update docs and FAQ — `did graph`/`did stats` in cli.md; graph export in argument-format.md; FAQ entries for visualization and CSV
 
