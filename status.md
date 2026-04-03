@@ -11,7 +11,7 @@
 - [x] Add CooperativePolicy — acknowledges disagreement, advances instead of looping; registered in POLICY_REGISTRY as "cooperative"
 - [x] Export new symbols from `__init__.py` — GraphData/Node/Edge, renderers, export_to_csv, CooperativePolicy in `__all__`
 - [x] Tests for all new features — test_graph.py (32), test_csv_export.py (9), test_cooperative_policy.py (10), test_transcript_timestamp.py (9), CLI graph/stats/csv (10)
-- [ ] Update docs and FAQ — `did graph`/`did stats` in cli.md; graph export in argument-format.md; FAQ entries for visualization and CSV
+- [x] Update docs and FAQ — `did graph`/`did stats` in cli.md; FAQ entries for visualization and CSV export
 
 ## Blockers
 

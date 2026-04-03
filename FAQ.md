@@ -131,5 +131,22 @@ A: `Argument.next_premise()` returns `None` — the policy will end the dialog. 
 **Q: Can I mix branching and linear premises in the same argument?**
 A: Yes. Only premises with `.on_agree`/`.on_disagree` branch; the rest follow insertion order. The traversal falls back to linear for any edge without an explicit target.
 
+**Q: How do I visualize an argument's branching structure?**
+A: Use `did graph`:
+```bash
+did graph my_argument/                          # Mermaid (default)
+did graph my_argument/ --format dot             # Graphviz DOT
+did graph my_argument/ --format json            # JSON for D3/Cytoscape
+did graph my_argument/ -o graph.md              # write to file
+```
+Or in Python: `graph = argument.to_graph()` returns a `GraphData` object, then pass to `to_mermaid(graph)`, `to_dot(graph)`, or `to_graph_json(graph)`.
+
+**Q: How do I export arguments to CSV for analysis?**
+A: Use `did export --format csv`:
+```bash
+did export examples/sample_arguments/ corpus.csv --format csv
+```
+Or in Python: `export_to_csv(argument, "output.csv")` for a single argument, `export_library_to_csv(root, "corpus.csv")` for a whole library. Output is one row per statement (long format), ready for pandas.
+
 **Q: How do I plug in an OPM reranker/multiple_choice solver?**
 A: Implement `ChoiceSolverProtocol` (`choices.py`) and pass it to `MultiChoicePolicy(arg, choice_solver=my_solver)`. A future version will auto-discover OPM `opm.agents.reranker` plugins the same way yes/no solvers are discovered via `opm.agents.yesno`.

@@ -160,6 +160,47 @@ unless overridden with `-f`.
 
 ---
 
+### `dd graph` — render premise graph
+
+```
+dd graph <argument-dir> [--format mermaid|dot|json] [--output FILE]
+```
+
+Renders the premise graph of an argument. Default format is **Mermaid**
+(renders in GitHub, GitLab, Obsidian).
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--format` / `-f` | `mermaid` | Output format: `mermaid`, `dot` (Graphviz), or `json` |
+| `--output` / `-o` | stdout | Write to file instead of stdout |
+
+Examples:
+
+```bash
+did graph examples/sample_arguments/philosophy/free_will_exists
+did graph my_arg/ --format dot | dot -Tsvg > graph.svg
+did graph my_arg/ --format json --output graph.json
+```
+
+---
+
+### `dd stats` — structural statistics
+
+```
+dd stats <path>
+```
+
+Prints structural metrics for a single argument or an entire library directory:
+premise count, statement count, explicit edge count, max graph depth, branching
+factor, choice count, and translation language count.
+
+```bash
+did stats examples/sample_arguments          # whole library
+did stats examples/sample_arguments/science  # one category
+```
+
+---
+
 ### `dd serve` — start the REST API server
 
 ```
