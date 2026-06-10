@@ -184,3 +184,5 @@ pip-selfcheck.json
 TODO.md
 ROADMAP.md
 *,cover
+.generation_checkpoint.json
+generation_log.txt
