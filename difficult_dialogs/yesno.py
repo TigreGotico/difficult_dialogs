@@ -14,7 +14,10 @@ from typing import Protocol, runtime_checkable
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_PLUGIN = "ovos-solver-yes-no-plugin"
+_DEFAULT_PLUGIN = "ovos-yes-no-plugin"
+# entry-point names tried first, in order; the dist ovos-solver-yes-no-plugin
+# registers "ovos-yes-no-plugin" but older releases used the dist name itself
+_PREFERRED_PLUGINS = ("ovos-yes-no-plugin", "ovos-solver-yes-no-plugin")
 _ENTRY_POINT_GROUPS = ("opm.agents.yesno",)
 
 
@@ -35,13 +38,40 @@ class YesNoSolverProtocol(Protocol):
 # Plugin loader
 # ---------------------------------------------------------------------------
 
+class _YesNoEngineAdapter:
+    """Adapt ``YesNoEngine.yes_or_no(question, response, lang)`` plugins to
+    :class:`YesNoSolverProtocol`.
+
+    The ``question`` argument is contextual only; standalone text
+    classification passes an empty question.
+    """
+
+    def __init__(self, engine: object) -> None:
+        self._engine = engine
+
+    def match_yes_or_no(self, text: str, lang: str) -> bool | None:
+        return self._engine.yes_or_no("", text, lang=lang)
+
+
+def _adapt(instance: object) -> YesNoSolverProtocol | None:
+    """Return *instance* as a :class:`YesNoSolverProtocol`, wrapping if needed."""
+    if callable(getattr(instance, "match_yes_or_no", None)):
+        return instance
+    if callable(getattr(instance, "yes_or_no", None)):
+        return _YesNoEngineAdapter(instance)
+    return None
+
+
 def _load_solver(plugin_name: str = _DEFAULT_PLUGIN) -> YesNoSolverProtocol:
     """Load a yes/no solver from the ``opm.agents.yesno`` entry-point group.
 
-    Tries *plugin_name* first, then any other registered plugin.
+    Tries *plugin_name* first, then the preferred default names, then any
+    other registered plugin.  Supports both the ``match_yes_or_no(text, lang)``
+    protocol and the ``YesNoEngine.yes_or_no(question, response, lang)`` API
+    (wrapped in an adapter).
 
     Args:
-        plugin_name: Entry-point name to prefer (default: ``ovos-solver-yes-no-plugin``).
+        plugin_name: Entry-point name to prefer (default: ``ovos-yes-no-plugin``).
 
     Returns:
         An instantiated solver satisfying :class:`YesNoSolverProtocol`.
@@ -54,15 +84,17 @@ def _load_solver(plugin_name: str = _DEFAULT_PLUGIN) -> YesNoSolverProtocol:
         for ep in importlib.metadata.entry_points(group=group):
             eps.setdefault(ep.name, ep)  # first group wins on name collision
 
-    for name in (plugin_name, *eps.keys()):
-        if name not in eps:
+    seen: set[str] = set()
+    for name in (plugin_name, *_PREFERRED_PLUGINS, *eps.keys()):
+        if name not in eps or name in seen:
             continue
+        seen.add(name)
         try:
             cls = eps[name].load()
-            instance = cls()
-            if callable(getattr(instance, "match_yes_or_no", None)):
+            solver = _adapt(cls())
+            if solver is not None:
                 logger.debug("difficult_dialogs: loaded yes/no solver '%s'", name)
-                return instance
+                return solver
         except Exception as exc:
             logger.warning(
                 "difficult_dialogs: failed to load yes/no solver '%s': %s",
@@ -97,8 +129,8 @@ def set_solver(solver: YesNoSolverProtocol) -> None:
     Example::
 
         from difficult_dialogs.yesno import set_solver
-        from ovos_yes_no_solver import YesNoSolver
-        set_solver(YesNoSolver())
+        from ovos_yes_no import HeuristicYesNoEngine
+        set_solver(_YesNoEngineAdapter(HeuristicYesNoEngine()))
     """
     global _solver
     _solver = solver

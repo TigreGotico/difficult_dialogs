@@ -110,6 +110,63 @@ def test_load_solver_skips_broken_plugin(monkeypatch) -> None:
 
 
 # ---------------------------------------------------------------------------
+# _load_solver — yes_or_no (YesNoEngine) API adapter
+# ---------------------------------------------------------------------------
+
+class _FakeYesNoEngine:
+    """Engine exposing only the ``yes_or_no(question, response, lang)`` API."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str, str]] = []
+
+    def yes_or_no(self, question: str, response: str, lang: str = "en-US") -> bool | None:
+        self.calls.append((question, response, lang))
+        return "yes" in response
+
+
+def test_load_solver_adapts_yes_or_no_engine(monkeypatch) -> None:
+    engine = _FakeYesNoEngine()
+    ep = _make_ep("ovos-yes-no-plugin", engine)
+    monkeypatch.setattr(
+        "importlib.metadata.entry_points",
+        lambda group: [ep],
+    )
+    solver = _load_solver()
+    assert solver.match_yes_or_no("yes please", "en-US") is True
+    assert solver.match_yes_or_no("nah", "en-US") is False
+    # the adapter passes the text as the response with an empty question
+    assert engine.calls[0] == ("", "yes please", "en-US")
+
+
+def test_load_solver_prefers_match_yes_or_no_over_adapter(monkeypatch) -> None:
+    native = _make_solver(True)
+    engine = _FakeYesNoEngine()
+    ep_native = _make_ep("ovos-yes-no-plugin", native)
+    ep_engine = _make_ep("some-engine-plugin", engine)
+    monkeypatch.setattr(
+        "importlib.metadata.entry_points",
+        lambda group: [ep_engine, ep_native],
+    )
+    solver = _load_solver()
+    assert solver is native
+
+
+def test_load_solver_skips_object_without_either_api(monkeypatch) -> None:
+    class _Useless:
+        pass
+
+    engine = _FakeYesNoEngine()
+    ep_useless = _make_ep("ovos-yes-no-plugin", _Useless())
+    ep_engine = _make_ep("zz-engine-plugin", engine)
+    monkeypatch.setattr(
+        "importlib.metadata.entry_points",
+        lambda group: [ep_useless, ep_engine],
+    )
+    solver = _load_solver()
+    assert solver.match_yes_or_no("yes", "en-US") is True
+
+
+# ---------------------------------------------------------------------------
 # is_agreement / is_disagreement helpers
 # ---------------------------------------------------------------------------
 
