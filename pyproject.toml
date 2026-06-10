@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "difficult_dialogs"
 dynamic = ["version"]
 description = "Structured argument framework for meaningful debates"
-readme = "readme.md"
+readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.10"
 authors = [
@@ -80,10 +80,10 @@ did = "difficult_dialogs.cli:main"
 [project.entry-points."difficult_dialogs.policies"]
 
 [project.urls]
-Homepage = "https://github.com/JarbasAl/difficult_dialogs"
-Documentation = "https://github.com/JarbasAl/difficult_dialogs#readme"
-Repository = "https://github.com/JarbasAl/difficult_dialogs"
-Issues = "https://github.com/JarbasAl/difficult_dialogs/issues"
+Homepage = "https://github.com/TigreGotico/difficult_dialogs"
+Documentation = "https://github.com/TigreGotico/difficult_dialogs#readme"
+Repository = "https://github.com/TigreGotico/difficult_dialogs"
+Issues = "https://github.com/TigreGotico/difficult_dialogs/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
