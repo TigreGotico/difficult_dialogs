@@ -1,36 +1,21 @@
 # difficult_dialogs
 
-**Structured argumentation framework — compile knowledge once, run debates forever.**
+difficult_dialogs is a structured argumentation framework. An LLM generates the content of a debate once, as plain-text argument files. A deterministic policy engine then runs the debate any number of times, without another LLM call.
 
-[![Tests](https://img.shields.io/badge/tests-794%20passed-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-701%20passed-brightgreen)]()
 [![Coverage](https://img.shields.io/badge/coverage-97%25-green)]()
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)]()
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue)]()
 
 ---
 
-## The Problem
+## Why use it
 
-LLMs are great for debates, but they:
-- ❌ Hallucinate facts mid-conversation
-- ❌ Cost money per call at scale
-- ❌ Add 2–5 s latency per turn
-- ❌ Require network access
+An LLM used directly for a debate has four problems. It can hallucinate facts mid-conversation. It costs money on every call at scale. It adds two to five seconds of latency per turn. It needs network access.
 
-## The Solution
+difficult_dialogs separates the content of an argument from its delivery. Generate the argument once with an LLM, about sixty seconds per topic. Store it as plain-text files: `.premise`, `.support`, `.source`, `.why`, `.who`, and related fields. From then on, a policy engine runs the debate in under one millisecond per turn, offline, at no per-turn cost. The files are auditable and work with `git diff`.
 
-**Generate arguments once with an LLM. Run them forever without one.**
-
-```
-┌──────────────────┐     ┌──────────────────────┐     ┌───────────────────┐
-│  LLM (one-time)  │     │  Plain-text files     │     │  Policy engine    │
-│  generate once   │────▶│  .premise  .support   │────▶│  deterministic    │
-│  ~60 s / topic   │     │  .source   .why  .who │     │  <1 ms / turn     │
-└──────────────────┘     └──────────────────────┘     └───────────────────┘
-      Smart                  Auditable, git-friendly       Offline, free
-```
-
-Optionally layer an `LLMEnhancedPolicy` on top to rephrase responses at runtime — without changing the locked argument structure.
+You can also layer an `LLMEnhancedPolicy` on top of any policy to rephrase responses at runtime, without changing the underlying argument structure.
 
 ---
 
@@ -51,11 +36,11 @@ Python 3.10+. Requires `ovos-plugin-manager`, `ovos-solver-yes-no-plugin`, `ovos
 ### CLI
 
 ```bash
-dd debate    examples/i_think_therefore_i_am        # interactive debate
-dd list      examples/sample_arguments              # browse library
-dd validate  examples/sample_arguments              # quality report
-dd serve     --port 8080                            # REST API server
-dd generate  "Solar energy is cost-effective" \
+did debate    examples/i_think_therefore_i_am        # interactive debate
+did list      examples/sample_arguments              # browse library
+did validate  examples/sample_arguments              # quality report
+did serve     --port 8080                            # REST API server
+did generate  "Solar energy is cost-effective" \
              --server http://localhost:8000          # LLM-generate an argument
 ```
 
@@ -103,7 +88,7 @@ arg = (
 
 ## File format
 
-Arguments are plain-text directories — one subdirectory per premise:
+Arguments are plain-text directories, one subdirectory per premise:
 
 ```
 argument_name/
@@ -129,7 +114,7 @@ Full reference: [docs/argument-format.md](docs/argument-format.md)
 ## Graph visualization
 
 Arguments with branching (`.on_agree`/`.on_disagree`/`.choices`) form directed
-graphs. Visualize with `did graph`:
+graphs. View a graph with `did graph`:
 
 ```bash
 did graph examples/sample_arguments/technology/should_ai_be_regulated
@@ -158,24 +143,26 @@ Browse all sample graphs: [docs/GRAPHS.md](docs/GRAPHS.md)
 
 ## Policies
 
-Policies are the "personality" of the dialog. The argument content never changes.
+A policy sets the "personality" of the dialog. The argument content stays the same across all policies.
 
 | Policy | Style | Uses support | Asks questions |
 |---|---|---|---|
-| `KnowItAllPolicy` | Persuasive — corrects with evidence | ✅ | ❌ |
-| `SilentPolicy` | Lecture — no interaction | ❌ | ❌ |
-| `SocraticPolicy` | Questioning — Socratic method | ✅ | ✅ |
-| `DebatePolicy` | Adversarial — challenges user | ✅ | ✅ |
-| `ExploratoryPolicy` | Neutral — presents multiple sides | ✅ | ✅ |
-| `MaieuticPolicy` | Guided discovery | ✅ | ✅ |
-| `SkepticPolicy` | Doubting — user must prove it | ✅ | ✅ |
-| `TeacherPolicy` | Educational — lesson structure | ✅ | ✅ |
-| `DebaterPolicy` | Formal debate rules | ✅ | ✅ |
-| `MinimalistPolicy` | Terse confirmations only | ❌ | ❌ |
+| `KnowItAllPolicy` | Persuasive: corrects with evidence | Yes | No |
+| `SilentPolicy` | Lecture: no interaction | No | No |
+| `SocraticPolicy` | Questioning, using the Socratic method | Yes | Yes |
+| `DebatePolicy` | Adversarial: challenges the user | Yes | Yes |
+| `ExploratoryPolicy` | Neutral: presents multiple sides | Yes | Yes |
+| `MaieuticPolicy` | Guided discovery | Yes | Yes |
+| `SkepticPolicy` | Doubting: the user must prove the point | Yes | Yes |
+| `TeacherPolicy` | Educational, with a lesson structure | Yes | Yes |
+| `DebaterPolicy` | Formal debate rules | Yes | Yes |
+| `MinimalistPolicy` | Terse confirmations only | No | No |
 | `AdaptivePolicy` | Switches policy after N disagreements | via inner | via inner |
-| `WebhookPolicy` | Forwards to HTTP endpoint, local fallback | ✅ | ❌ |
-| `LLMEnhancedPolicy` | Rephrases responses via LLM at runtime | via inner | via inner |
-| `MultiArgumentPolicy` | Chains multiple arguments sequentially | via inner | via inner |
+| `WebhookPolicy` | Forwards to an HTTP endpoint, with a local fallback | Yes | No |
+| `LLMEnhancedPolicy` | Rephrases responses through an LLM at runtime | via inner | via inner |
+| `MultiArgumentPolicy` | Chains multiple arguments in sequence | via inner | via inner |
+| `MultiChoicePolicy` | Presents labeled choices (A/B/C) each turn | Yes | Yes |
+| `CooperativePolicy` | Acknowledges disagreement and seeks common ground | Yes | Yes |
 
 ```python
 from difficult_dialogs import get_policy, Argument
@@ -203,11 +190,11 @@ policy = LLMEnhancedPolicy(
 )
 ```
 
-Falls back silently to original text if the LLM server is unreachable.
+If the LLM server is unreachable, the policy falls back to the original text.
 
 ### AdaptivePolicy
 
-Automatically softens approach when the user keeps disagreeing:
+Softens its approach automatically when the user keeps disagreeing:
 
 ```python
 from difficult_dialogs import AdaptivePolicy, KnowItAllPolicy, ExploratoryPolicy
@@ -301,7 +288,7 @@ arg.save("arguments/solar_energy")
 Or from the CLI:
 
 ```bash
-dd generate "Solar energy is cost-effective" \
+did generate "Solar energy is cost-effective" \
   --server http://localhost:11434 \
   --model qwen-72b \
   --output arguments/
@@ -319,7 +306,7 @@ ollama serve                                               # http://localhost:11
 ## REST server
 
 ```bash
-dd serve --host 0.0.0.0 --port 8080
+did serve --host 0.0.0.0 --port 8080
 ```
 
 | Endpoint | Description |
@@ -337,11 +324,11 @@ dd serve --host 0.0.0.0 --port 8080
 ## Validation
 
 ```python
-from difficult_dialogs.validators import validate_argument, get_quality_label
+from difficult_dialogs.validators import validate_argument, ArgumentValidator
 
 result = validate_argument(arg)
-print(result.score)                     # 0.0–1.0
-print(get_quality_label(result.score))  # "Excellent ⭐" | "Good 👍" | "Fair 😐" | "Poor ❌"
+print(result.score)                                  # 0.0-1.0
+print(ArgumentValidator().get_quality_label(result.score))  # "Excellent ⭐" | "Good 👍" | "Fair 😐" | "Poor ❌"
 for issue in result.issues:
     print(issue)
 ```
@@ -355,7 +342,7 @@ uv run pytest test/ -v
 uv run pytest test/ --cov=difficult_dialogs --cov-report=term-missing
 ```
 
-**794 tests, 97% average coverage.**
+**701 tests, 97% average coverage.**
 
 ---
 
@@ -367,11 +354,11 @@ difficult_dialogs/
 ├── premises.py          # Premise — Six Ws: what/why/how/when/where/who
 ├── arguments.py         # Argument — load/save/diff/merge
 ├── builder.py           # ArgumentBuilder / PremiseBuilder fluent API
-├── policy.py            # BasePolicy + 14 concrete policies + registry
+├── policy.py            # BasePolicy + 16 concrete policies + registry
 ├── library.py           # ArgumentLibrary — keyword search
 ├── validators.py        # Quality scoring
 ├── server.py            # FastAPI REST server
-├── cli.py               # dd / difficult-dialogs CLI
+├── cli.py               # did / difficult-dialogs CLI
 ├── export/
 │   ├── json.py          # JSON export
 │   ├── sqlite.py        # SQLite export
@@ -389,25 +376,25 @@ difficult_dialogs/
 
 | | difficult_dialogs | Raw LLM | Other debate tools |
 |---|---|---|---|
-| Cost per debate | $0 (after generation) | $0.10–0.50 | Varies |
-| Latency | <1 ms | 2–5 s | 1–3 s |
-| Offline | ✅ | ❌ | ❌ |
-| Hallucinations | ❌ none | ✅ possible | ⚠️ sometimes |
-| Auditable content | ✅ plain text | ❌ black box | ⚠️ limited |
-| Git-versionable | ✅ | ❌ | ⚠️ |
-| LLM enhancement | optional | required | n/a |
+| Cost per debate | $0 after generation | $0.10-0.50 | Varies |
+| Latency | Under 1 ms | 2-5 s | 1-3 s |
+| Offline | Yes | No | No |
+| Hallucinations | None | Possible | Sometimes |
+| Auditable content | Yes, plain text | No, black box | Limited |
+| Git-versionable | Yes | No | Partial |
+| LLM enhancement | Optional | Required | N/A |
 
 ---
 
 ## Documentation
 
-- [docs/index.md](docs/index.md) — Overview and navigation
-- [docs/argument-format.md](docs/argument-format.md) — File format reference
-- [docs/USER_GUIDE.md](docs/USER_GUIDE.md) — End-user manual
-- [docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md) — API reference
-- [docs/POLICIES.md](docs/POLICIES.md) — All 15 policies documented
-- [docs/GRAPHS.md](docs/GRAPHS.md) — Premise graphs for all sample arguments
-- [docs/cli.md](docs/cli.md) — CLI reference (`did graph`, `did stats`, `did debate`, …)
+- [docs/index.md](docs/index.md): overview and navigation
+- [docs/argument-format.md](docs/argument-format.md): file format reference
+- [docs/USER_GUIDE.md](docs/USER_GUIDE.md): end-user manual
+- [docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md): API reference
+- [docs/POLICIES.md](docs/POLICIES.md): policy reference
+- [docs/GRAPHS.md](docs/GRAPHS.md): premise graphs for all sample arguments
+- [docs/cli.md](docs/cli.md): CLI reference (`did graph`, `did stats`, `did debate`, and others)
 
 ---
 
@@ -421,10 +408,17 @@ uv run pytest test/ -v
 ```
 
 PRs target the `dev` branch.
-Issues: https://github.com/TigreGotico/difficult_dialogs/issues
+Report issues on the [issue tracker](https://github.com/TigreGotico/difficult_dialogs/issues).
+
+---
+
+## Related projects
+
+- [TigreGotico/emotion-algebra](https://github.com/TigreGotico/emotion-algebra): structured data for working with human emotions, usable alongside argument policies.
+- [TigreGotico/py-argmining](https://github.com/TigreGotico/py-argmining): argument mining tools that can feed source material into an argument directory.
 
 ---
 
 ## License
 
-Apache 2.0 — see [LICENSE](LICENSE).
+Apache 2.0. See [LICENSE](LICENSE).

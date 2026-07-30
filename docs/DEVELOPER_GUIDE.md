@@ -60,9 +60,9 @@ difficult_dialogs/
 ├── builder.py           # ArgumentBuilder / PremiseBuilder fluent API
 ├── policy.py            # BasePolicy ABC + 10 concrete policies + AdaptivePolicy
 │                        # + WebhookPolicy + MultiArgumentPolicy
-├── library.py           # ArgumentLibrary — keyword search over argument dirs
+├── library.py           # ArgumentLibrary: keyword search over argument dirs
 ├── validators.py        # Argument validation utilities
-├── cli.py               # CLI entry point (dd / difficult-dialogs)
+├── cli.py               # CLI entry point (did / difficult-dialogs)
 ├── server.py            # FastAPI REST server
 ├── exceptions.py        # Custom exceptions
 ├── export/
@@ -257,7 +257,7 @@ premise2 = Premise.from_dict(data)
 
 ### Argument
 
-A complete debate with intro, conclusion, and premises.
+A complete debate, made up of an intro, a conclusion, and one or more premises.
 
 ```python
 from difficult_dialogs import Argument
@@ -357,7 +357,7 @@ arg2 = Argument.from_dict(data)
 
 ### ArgumentBuilder
 
-Fluent API for programmatic argument construction — `builder.py`.
+Fluent API for programmatic argument construction: `builder.py`.
 
 ```python
 from difficult_dialogs.builder import ArgumentBuilder
@@ -401,7 +401,7 @@ arg = (
 
 ### ArgumentLibrary
 
-Keyword search index over a directory of arguments — `library.py`.
+Keyword search index over a directory of arguments: `library.py`.
 
 ```python
 from difficult_dialogs.library import ArgumentLibrary, SearchResult
@@ -423,7 +423,7 @@ health_args = lib.by_category("health")
 arg = lib.get("regular_exercise_improves_mental_health")
 ```
 
-`ArgumentLibrary.scan()` — `library.py` — walks subdirectories, loads each `Argument`, and builds an in-memory index. Pass `reload=True` to rescan.
+`ArgumentLibrary.scan()` (`library.py`) walks subdirectories, loads each `Argument`, and builds an in-memory index. Pass `reload=True` to rescan.
 
 ---
 
@@ -572,7 +572,7 @@ arg = gen.generate(
     language="en"
 )
 
-# Save to disk — Argument.save() writes the full subdirectory structure
+# Save to disk: Argument.save() writes the full subdirectory structure
 arg.save("arguments/ubi_poverty")
 print(f"Generated argument with {len(arg.premises)} premises")
 ```
@@ -673,7 +673,7 @@ enhancer.clear_cache()  # Clear cached rephrasings
 
 ### LLMEnhancedPolicy
 
-Wraps any existing policy and rephrases its bot responses via `LLMEnhancer` — `policy.py`.
+Wraps any existing policy and rephrases its bot responses via `LLMEnhancer`: `policy.py`.
 
 ```python
 from difficult_dialogs.policy import LLMEnhancedPolicy, KnowItAllPolicy
@@ -691,7 +691,7 @@ LLMEnhancedPolicy(
 )
 ```
 
-All dialog logic — premise sequencing, agreement tracking, support delivery — is handled by the `inner_policy`. `LLMEnhancedPolicy` intercepts each bot response and calls `enhancer.rephrase(text, style=style)`. If the enhancer fails for any reason (server down, timeout, exception), the original text is returned unchanged.
+All dialog logic (premise sequencing, agreement tracking, support delivery) is handled by the `inner_policy`. `LLMEnhancedPolicy` intercepts each bot response and calls `enhancer.rephrase(text, style=style)`. If the enhancer fails for any reason (server down, timeout, exception), the original text is returned unchanged.
 
 #### Usage
 
@@ -867,9 +867,9 @@ while not policy.state.finished:
 
 See [POLICIES.md](POLICIES.md) for full documentation of these meta-policies.
 
-- `AdaptivePolicy` — switches from one inner policy to another after N consecutive disagreements
-- `WebhookPolicy` — forwards turns to an HTTP endpoint with local fallback
-- `MultiArgumentPolicy` — chains multiple `Argument` objects into one session, advancing automatically
+- `AdaptivePolicy`: switches from one inner policy to another after N consecutive disagreements
+- `WebhookPolicy`: forwards turns to an HTTP endpoint with local fallback
+- `MultiArgumentPolicy`: chains multiple `Argument` objects into one session, advancing automatically
 
 ---
 
@@ -1029,7 +1029,8 @@ Use GitHub Issues with:
 
 - **Documentation:** `/docs/` directory
 - **API Reference:** This document
-- **Issues:** https://github.com/TigreGotico/difficult_dialogs/issues
-- **Discussions:** https://github.com/TigreGotico/difficult_dialogs/discussions
+- **Issues:** [github.com/TigreGotico/difficult_dialogs/issues](https://github.com/TigreGotico/difficult_dialogs/issues)
+- **Discussions:** [github.com/TigreGotico/difficult_dialogs/discussions](https://github.com/TigreGotico/difficult_dialogs/discussions)
 
-Happy coding!
+---
+[← User stories](USER_STORIES.md) · [Home](index.md)

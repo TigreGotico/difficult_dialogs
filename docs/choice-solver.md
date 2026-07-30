@@ -1,13 +1,13 @@
 # Choice Solver (OPM Plugin)
 
 When a premise has a `.choices` file, user input must be matched to one of the
-labelled options. `parse_choice()` — `difficult_dialogs/choices.py:352` — does this matching.
+labelled options. `parse_choice()` (`difficult_dialogs/choices.py:352`) does this matching.
 
 ---
 
 ## Default offline solver
 
-With no plugin installed, matching is done entirely offline by `_DefaultChoiceSolver` —
+With no plugin installed, matching is done entirely offline by `_DefaultChoiceSolver`:
 `difficult_dialogs/choices.py:119`. Resolution order:
 
 1. Exact label match (case-insensitive, e.g. `"A"`, `"b"`).
@@ -33,12 +33,12 @@ The plugin is discovered automatically at import time via the
 matcher still runs first; the OPM solver is only called for inputs that produce
 no offline match.
 
-`_OPMChoiceSolverAdapter.match_choice()` — `difficult_dialogs/choices.py:202`
+`_OPMChoiceSolverAdapter.match_choice()`: `difficult_dialogs/choices.py:202`
 
 ### List installed solvers
 
 ```bash
-dd solvers
+did solvers
 ```
 
 Or in Python:
@@ -49,7 +49,7 @@ print(list_solvers())
 # {'ovos-choice-solver-bm25': 'ovos_bm25_solver.choices:BM25ChoiceSolver'}
 ```
 
-`list_solvers()` — `difficult_dialogs/choices.py:331`
+`list_solvers()`: `difficult_dialogs/choices.py:331`
 
 ---
 
@@ -64,7 +64,7 @@ configure("my-opm-reranker-plugin")   # entry-point name
 # Solver is reloaded on next parse_choice() call
 ```
 
-`configure()` — `difficult_dialogs/choices.py:315`
+`configure()`: `difficult_dialogs/choices.py:315`
 
 ### Inject a custom solver at runtime
 
@@ -85,9 +85,9 @@ from difficult_dialogs.choices import set_solver
 set_solver(MyChoiceSolver())
 ```
 
-`set_solver()` — `difficult_dialogs/choices.py:299`
+`set_solver()`: `difficult_dialogs/choices.py:299`
 
-The solver must implement `ChoiceSolverProtocol` — `difficult_dialogs/choices.py:88`.
+The solver must implement `ChoiceSolverProtocol`: `difficult_dialogs/choices.py:88`.
 
 ---
 
@@ -99,4 +99,7 @@ from difficult_dialogs.policy import MultiChoicePolicy
 policy = MultiChoicePolicy(arg, choice_solver=MyChoiceSolver())
 ```
 
-`MultiChoicePolicy.__init__()` — `difficult_dialogs/policy.py:1536`
+`MultiChoicePolicy.__init__()`: `difficult_dialogs/policy.py:1536`
+
+---
+[← Builder](builder.md) · [Home](index.md) · [CLI →](cli.md)
