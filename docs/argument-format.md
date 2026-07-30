@@ -30,7 +30,7 @@ that same stem (e.g. directory `moral_responsibility/` contains
 `moral_responsibility.premise`, `moral_responsibility.support`, etc.).
 
 A premise is only loaded if it has at least one `.premise` file with content
-(`Premise.is_complete` — `premises.py`).
+(`Premise.is_complete`: `premises.py`).
 
 ## File types
 
@@ -75,17 +75,17 @@ Lines loaded as contextual explanation fields (the "Five Ws + How").  Policies
 that implement `_check_five_w()` detect these keywords in the user's utterance
 and return a random matching line from the current premise.
 
-### `.choices` — Multiple-choice options
+### `.choices`: Multiple-choice options
 
 One option per non-empty line. Used by `MultiChoicePolicy` to present a labelled
 menu to the user instead of (or in addition to) yes/no.
 
 Format: `LABEL) text [outcome_keyword] [-> next_premise_name]`
 
-- `LABEL)` — single alphanumeric identifier (auto-assigned A, B, C… if omitted).
-- `[outcome_keyword]` — optional `[agree]`, `[disagree]`, `[clarify]`, or `[skip]`.
+- `LABEL)`: single alphanumeric identifier (auto-assigned A, B, C… if omitted).
+- `[outcome_keyword]`: optional `[agree]`, `[disagree]`, `[clarify]`, or `[skip]`.
   Default outcomes by position: A=agree, B=agree, C=disagree, D=clarify.
-- `-> next_premise_name` — optional jump target; overrides `on_agree`/`on_disagree`
+- `-> next_premise_name`: optional jump target; overrides `on_agree`/`on_disagree`
   for this specific choice.
 
 ```
@@ -95,8 +95,8 @@ C) I disagree [disagree]
 D) I need more context [clarify]
 ```
 
-Loaded via `Premise.apply_file()` → `parse_choices_file()` — `choices.py:392`.
-Stored in `Premise.choices: list[ChoiceOption]` — `premises.py:46`.
+Loaded via `Premise.apply_file()` → `parse_choices_file()`: `choices.py:392`.
+Stored in `Premise.choices: list[ChoiceOption]`: `premises.py:46`.
 
 Default outcomes when no `[outcome]` keyword is present, by positional label:
 
@@ -112,7 +112,7 @@ Default outcomes when no `[outcome]` keyword is present, by positional label:
 > agree/disagree split, add explicit outcome keywords:
 > `A) I agree [agree]` / `B) I disagree [disagree]`.
 
-### `.on_agree` / `.on_disagree` — Branching edges
+### `.on_agree` / `.on_disagree`: Branching edges
 
 Single-line files containing the **name** of the premise to visit next when the
 user agrees or disagrees with this premise. If absent, the argument falls back to
@@ -128,14 +128,14 @@ scientific_consensus_explained
 
 Together, `.on_agree`, `.on_disagree`, and `.choices` turn a flat argument into a
 **directed graph** (dialogue tree). The traversal is implemented in
-`Argument.next_premise()` — `arguments.py:113`.
+`Argument.next_premise()`: `arguments.py:113`.
 
 Resolution order inside `next_premise()`:
 1. Explicit `on_agree` / `on_disagree` file for the current premise.
 2. `ChoiceOption.next_premise` for the selected option outcome.
 3. Linear insertion-order fallback (backwards-compatible default).
 
-### `.translations.json` — bulk i18n translations
+### `.translations.json`: bulk i18n translations
 
 A file named `<stem>.translations.json` inside a premise directory stores
 translated strings for all fields and languages in one file.
@@ -156,16 +156,16 @@ Keys are BCP-47 language codes. Field names match the file extensions without
 the dot (`statements`, `support`, `source`, `what`, `why`, `how`, `when`,
 `where`, `who`).
 
-Loaded via `Premise.apply_file()` — `premises.py:166`. Stored in
-`Premise.translations: dict[str, dict[str, list[str]]]` — `premises.py:45`.
+Loaded via `Premise.apply_file()`: `premises.py:166`. Stored in
+`Premise.translations: dict[str, dict[str, list[str]]]`: `premises.py:45`.
 
-Retrieve translated statements with `Premise.get_statements(lang="es-ES")` —
+Retrieve translated statements with `Premise.get_statements(lang="es-ES")`:
 `premises.py:265`.
 
 Locale-specific flat files (`<stem>.es-ES.premise`) are also supported and
 follow the same storage path.
 
-### `entry_point` — non-linear start node
+### `entry_point`: non-linear start node
 
 To start the dialog at a premise other than the first one in insertion order,
 set `entry_point` in the argument. This is a Python-only field (not a file);
@@ -176,9 +176,9 @@ arg.entry_point = "economic_impacts"
 ```
 
 `BasePolicy.start()` reads `argument.entry_point` and sets
-`state.current_premise` accordingly — `policy.py:130`.
+`state.current_premise` accordingly: `policy.py:130`.
 
-## Example — `i_think_therefore_i_am/`
+## Example: `i_think_therefore_i_am/`
 
 ```
 i_think_therefore_i_am/
@@ -203,20 +203,20 @@ i_think_therefore_i_am/
 ```python
 from difficult_dialogs.arguments import Argument
 
-# Idiomatic — classmethod
+# Idiomatic: classmethod
 arg = Argument.from_directory("path/to/argument_name")
 
 # Equivalent instance method
 arg = Argument().load("path/to/argument_name")
 
-# arg.name         — "argument name" (underscores → spaces)
-# arg.intro        — opening string
-# arg.conclusion   — closing string
-# arg.premises     — list[Premise]
+# arg.name        : "argument name" (underscores → spaces)
+# arg.intro       : opening string
+# arg.conclusion  : closing string
+# arg.premises    : list[Premise]
 ```
 
-`Argument.load()` — `arguments.py:112` — iterates subdirectories and calls
-`Premise.apply_file()` — `premises.py:127` — for each file, dispatching by
+`Argument.load()` (`arguments.py:112`) iterates subdirectories and calls
+`Premise.apply_file()` (`premises.py:127`) for each file, dispatching by
 extension.
 
 ## Saving
@@ -225,7 +225,7 @@ extension.
 arg.save("path/to/output_dir")   # writes full directory structure
 ```
 
-`Argument.save()` — `arguments.py:198`.
+`Argument.save()`: `arguments.py:198`.
 
 ## Exporting
 
@@ -236,3 +236,6 @@ export_to_json(arg, "argument.json")
 md = export_to_markdown(arg, "argument.md")   # human-readable review doc
 db = export_to_sqlite("arguments/", "library.db")
 ```
+
+---
+[Home](index.md) · [Policies →](POLICIES.md)

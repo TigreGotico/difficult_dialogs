@@ -33,7 +33,7 @@ Difficult Dialogs is a framework for creating **portable, deterministic debate b
 
 ### When to Use This
 
-✅ **Good use cases:**
+**Good use cases:**
 - Educational debate tutors
 - Patient education in healthcare
 - Customer support FAQs
@@ -41,7 +41,7 @@ Difficult Dialogs is a framework for creating **portable, deterministic debate b
 - Offline/edge deployment
 - High-volume applications (1000s of users/day)
 
-❌ **Not suitable for:**
+**Not suitable for:**
 - Open-ended conversations
 - Topics requiring real-time information
 - Highly personalized interactions
@@ -146,7 +146,7 @@ BOT: Studies show that remote workers report fewer distractions and higher job s
 Do you agree? (y/n)
 ```
 
-**That's it!** You've created and run a debate bot in 5 minutes.
+You have now created and run a debate bot in five minutes.
 
 ---
 
@@ -338,7 +338,7 @@ argument = gen.generate(
     language="en"                    # Language code
 )
 
-# Save to disk — Argument.save() handles all file naming automatically
+# Save to disk: Argument.save() handles all file naming automatically
 argument.save("arguments/ev_better")
 print(f"Generated argument saved to arguments/ev_better")
 ```
@@ -357,8 +357,8 @@ print(f"Generated argument saved to arguments/ev_better")
 ### Tips for Better Generation
 
 1. **Be specific with topics:**
-   - ❌ "Climate change"
-   - ✅ "Carbon taxes effectively reduce emissions"
+   - Too broad: "Climate change"
+   - Specific: "Carbon taxes effectively reduce emissions"
 
 2. **Choose appropriate depth:**
    - Depth 1: Simple FAQ (2-3 premises)
@@ -547,7 +547,7 @@ arg = Argument.from_directory("examples/i_think_therefore_i_am")
 policy = get_policy("socratic", arg)
 
 async def user_input_stream():
-    """Yield pre-scripted turns — replace with real input in production."""
+    """Yield pre-scripted turns: replace with real input in production."""
     for turn in ["I think so", "not sure", "yes"]:
         yield turn
 
@@ -565,7 +565,7 @@ intro before the first user message and the conclusion once
 `policy.state.finished` is set.
 
 **Session persistence with async**: save state between requests using
-`policy.save_state(path)` / `policy.load_state(path)` (`BasePolicy` —
+`policy.save_state(path)` / `policy.load_state(path)` (`BasePolicy`:
 `policy.py`):
 
 ```python
@@ -877,8 +877,8 @@ policy.start()  # Resets the cache
 ### Getting Help
 
 - **Documentation:** `/docs/` directory
-- **Issues:** https://github.com/TigreGotico/difficult_dialogs/issues
-- **Discussions:** https://github.com/TigreGotico/difficult_dialogs/discussions
+- **Issues:** [github.com/TigreGotico/difficult_dialogs/issues](https://github.com/TigreGotico/difficult_dialogs/issues)
+- **Discussions:** [github.com/TigreGotico/difficult_dialogs/discussions](https://github.com/TigreGotico/difficult_dialogs/discussions)
 
 ---
 
@@ -1003,4 +1003,5 @@ Now that you've mastered the basics:
 2. **Explore Examples** (`examples/` directory) for working code
 3. **Join Discussions** on GitHub to share your use cases
 
-Happy debating!
+---
+[← Graphs](GRAPHS.md) · [Home](index.md) · [User stories →](USER_STORIES.md)

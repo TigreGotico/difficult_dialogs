@@ -337,3 +337,6 @@ graph TD
     mental_health_harm["mental_health_harm\n(3 stmts)"]
     erosion_of_truth --> mental_health_harm
 ```
+
+---
+[← CLI](cli.md) · [Home](index.md) · [User guide →](USER_GUIDE.md)

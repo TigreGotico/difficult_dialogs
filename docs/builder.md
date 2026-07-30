@@ -1,8 +1,8 @@
-# Python API — Builder and Loader
+# Python API: Builder and Loader
 
 ## Loading an argument from disk
 
-`Argument.from_directory()` — `difficult_dialogs/arguments.py:214`
+`Argument.from_directory()`: `difficult_dialogs/arguments.py:214`
 
 ```python
 from difficult_dialogs.arguments import Argument
@@ -15,7 +15,7 @@ arg = Argument.from_directory("path/to/my_argument")
 ```
 
 The directory is walked; each subdirectory becomes a `Premise` loaded via
-`Premise.apply_file()` — `difficult_dialogs/premises.py:166`.
+`Premise.apply_file()`: `difficult_dialogs/premises.py:166`.
 
 ### Validating after load
 
@@ -26,13 +26,13 @@ result = validate_argument(arg)
 print(result.passed, result.score, result.issues)
 ```
 
-`validate_argument()` — `difficult_dialogs/validators.py`
+`validate_argument()`: `difficult_dialogs/validators.py`
 
 ---
 
 ## Building an argument in code
 
-`ArgumentBuilder` / `PremiseBuilder` — `difficult_dialogs/builder.py`
+`ArgumentBuilder` / `PremiseBuilder`: `difficult_dialogs/builder.py`
 
 ```python
 from difficult_dialogs.builder import ArgumentBuilder
@@ -68,7 +68,7 @@ arg.save("my_arguments/climate_change")
 | `.add_premise(p)` | Attach a pre-built `Premise` directly. |
 | `.build()` | Return the finished `Argument`. |
 
-`ArgumentBuilder.__init__()` — `difficult_dialogs/builder.py:209`
+`ArgumentBuilder.__init__()`: `difficult_dialogs/builder.py:209`
 
 ### `PremiseBuilder` methods
 
@@ -103,7 +103,7 @@ Each method can be chained multiple times to add more than one answer.
 | `.branch(on_agree=…, on_disagree=…)` | Set both edges in one call. |
 | `.choice(text, outcome, next_premise, label)` | Add a multiple-choice option. |
 
-`PremiseBuilder.branch()` — `difficult_dialogs/builder.py:137`
+`PremiseBuilder.branch()`: `difficult_dialogs/builder.py:137`
 
 #### Navigation
 
@@ -112,7 +112,7 @@ Each method can be chained multiple times to add more than one answer.
 | `.done()` | Finish this premise and return to `ArgumentBuilder`. |
 | `.build()` | Return the finished `Premise` (also registers it). |
 
-`PremiseBuilder.done()` — `difficult_dialogs/builder.py:177`
+`PremiseBuilder.done()`: `difficult_dialogs/builder.py:177`
 
 ---
 
@@ -143,7 +143,7 @@ arg = (
 
 When the user agrees with `first_claim`, the dialog jumps to `evidence`.
 When they disagree, it goes to `explain_mechanism`.
-`Argument.next_premise()` — `difficult_dialogs/arguments.py:113`
+`Argument.next_premise()`: `difficult_dialogs/arguments.py:113`
 
 ---
 
@@ -158,7 +158,7 @@ merged = Argument.merge(
 )
 ```
 
-`Argument.merge()` — `difficult_dialogs/arguments.py:413`
+`Argument.merge()`: `difficult_dialogs/arguments.py:413`
 
 ---
 
@@ -176,4 +176,7 @@ data = arg.to_dict()
 arg3 = Argument.from_dict(data)
 ```
 
-`Argument.save()` — `difficult_dialogs/arguments.py:246`
+`Argument.save()`: `difficult_dialogs/arguments.py:246`
+
+---
+[← Policies](POLICIES.md) · [Home](index.md) · [Choice solver →](choice-solver.md)

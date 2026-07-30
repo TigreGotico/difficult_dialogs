@@ -1,4 +1,4 @@
-# User Stories — difficult_dialogs
+# User Stories: difficult_dialogs
 
 Developer-perspective stories for the `difficult_dialogs` library.  Each story
 identifies the downstream use case, the relevant API, and any gap that was
@@ -6,7 +6,7 @@ found and addressed.
 
 ---
 
-## US-01 — Embed a structured debate in a chatbot
+## US-01: Embed a structured debate in a chatbot
 
 > As a chatbot developer, I want to load an argument file and feed user
 > messages through a policy so my bot can hold a structured persuasive dialog
@@ -15,7 +15,7 @@ found and addressed.
 **API path:** `Argument.from_directory(path)` → `get_policy(name, arg)` →
 `policy.start()` / `policy.respond(user_input)`
 
-**Async variant:** `async for response in policy.stream(input_queue):` —
+**Async variant:** `async for response in policy.stream(input_queue):`.
 `BasePolicy.stream` (`policy.py`) accepts an `AsyncGenerator` of user strings
 and yields bot responses.
 
@@ -36,7 +36,7 @@ async def run(input_stream):
 
 ---
 
-## US-02 — Build an argument programmatically at runtime
+## US-02: Build an argument programmatically at runtime
 
 > As an app developer, I want to construct arguments in code (not from files)
 > so I can generate them from a database or API response.
@@ -64,21 +64,21 @@ arg = (
 
 ---
 
-## US-03 — Persist and resume a debate session
+## US-03: Persist and resume a debate session
 
 > As a web developer, I want to save a session's state to disk and restore it
 > in the next request so my stateless API can host multi-turn debates.
 
-**API path:** `policy.save_state(path)` / `policy.load_state(path)` —
+**API path:** `policy.save_state(path)` / `policy.load_state(path)`:
 `BasePolicy` (`policy.py`)
 
 ```python
-# Request 1 — save
+# Request 1: save
 policy.start()
 policy.respond("I disagree")
 policy.save_state("/tmp/session_42.json")
 
-# Request 2 — restore
+# Request 2: restore
 policy2 = get_policy("knowitall", arg)
 policy2.load_state("/tmp/session_42.json")
 reply = policy2.respond("Tell me more")
@@ -90,7 +90,7 @@ For key-value stores: `policy.state.to_dict()` / `policy.restore_state(d)`.
 
 ---
 
-## US-04 — Validate an argument before publishing
+## US-04: Validate an argument before publishing
 
 > As a content team member, I want to validate an argument's quality score
 > before it goes live so I can catch missing sources or weak premises.
@@ -115,7 +115,7 @@ CLI equivalent: `did validate examples/i_think_therefore_i_am`
 
 ---
 
-## US-05 — Search a library of arguments by topic
+## US-05: Search a library of arguments by topic
 
 > As a debate app developer, I want to search my argument library by keyword
 > so I can surface the most relevant argument for a user's topic.
@@ -135,7 +135,7 @@ for r in results:
 
 ---
 
-## US-06 — Switch policies mid-conversation
+## US-06: Switch policies mid-conversation
 
 > As a tutoring app developer, I want to switch from a teacher policy to a
 > Socratic one if the student seems confident.
@@ -158,7 +158,7 @@ Automatic switching: `AdaptivePolicy` also auto-switches after
 
 ---
 
-## US-07 — Export a session transcript for audit
+## US-07: Export a session transcript for audit
 
 > As a compliance engineer, I want to export session transcripts in JSON and
 > Markdown so I can store structured records of AI-assisted debates.
@@ -179,7 +179,7 @@ CLI: `did debate ARG_DIR --save-transcript session.md`
 
 ---
 
-## US-08 — Generate an argument from a topic with a local LLM
+## US-08: Generate an argument from a topic with a local LLM
 
 > As a developer using Ollama locally, I want to generate a structured
 > argument from a topic string to bootstrap content.
@@ -201,7 +201,7 @@ exported from package root.
 
 ---
 
-## US-09 — Run a debate non-interactively (scripted / CI)
+## US-09: Run a debate non-interactively (scripted / CI)
 
 > As a CI pipeline developer, I want to pipe pre-written turns into
 > `did debate` and capture the output so I can regression-test argument files.
@@ -220,7 +220,7 @@ yes
 
 ---
 
-## US-10 — Chain multiple arguments into a curriculum
+## US-10: Chain multiple arguments into a curriculum
 
 > As an e-learning developer, I want to sequence three arguments so my course
 > flows naturally.
@@ -243,7 +243,7 @@ documented in USER_GUIDE.md.
 
 ---
 
-## US-11 — Use a custom yes/no solver for another language
+## US-11: Use a custom yes/no solver for another language
 
 > As a Spanish-language app developer, I want to plug in a Spanish yes/no
 > solver so the dialog policies detect agreement correctly.
@@ -265,12 +265,12 @@ confirmed and documented here.
 
 ---
 
-## US-12 — Add auth to the REST server demo
+## US-12: Add auth to the REST server demo
 
 > As a backend developer, I want to add API-key auth to `examples/server.py`
 > before deploying publicly.
 
-**Location:** `examples/server.py` — demo app, not part of the library.
+**Location:** `examples/server.py`: demo app, not part of the library.
 
 ```python
 # Add to examples/server.py to enable API-key auth:
@@ -288,3 +288,6 @@ async def verify_token(key: str = Security(api_key_header)):
 ```
 
 **Gap addressed:** Comment block added to `examples/server.py`.
+
+---
+[← User guide](USER_GUIDE.md) · [Home](index.md) · [Developer guide →](DEVELOPER_GUIDE.md)
