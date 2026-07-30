@@ -186,6 +186,7 @@ Return ONLY valid JSON, no other text."""
             ("how", premise.add_how),
             ("when", premise.add_when),
             ("where", premise.add_where),
+            ("who", premise.add_who),
         ):
             if key in ws and ws[key]:
                 adder(ws[key])
@@ -275,7 +276,7 @@ If you're unsure of exact URLs, suggest general reference pages."""
         Returns:
             Dict with keys what/why/how/when/where; missing keys on failure.
         """
-        system_prompt = """You are generating Five-Ws explanations for a debate bot.
+        system_prompt = """You are generating Five-Ws + How + Who explanations for a debate bot.
 
 Respond with JSON:
 {
@@ -283,17 +284,18 @@ Respond with JSON:
   "why": "why this claim is true or important",
   "how": "how this works or how we know it",
   "when": "when this applies or became relevant",
-  "where": "where this is observed or documented"
+  "where": "where this is observed or documented",
+  "who": "who is affected by or who are the authorities on this claim"
 }
 
-Keep each value under 2 sentences. Be clear and concise. All five keys are required."""
+Keep each value under 2 sentences. Be clear and concise. All six keys are required."""
 
-        prompt = f"""Explain this claim using the Five Ws:
+        prompt = f"""Explain this claim using the Five Ws + How + Who:
 
 Claim: {claim}
 Context: {"; ".join(statements)}
 
-Provide a one- or two-sentence answer for each of: what, why, how, when, where."""
+Provide a one- or two-sentence answer for each of: what, why, how, when, where, who."""
 
         try:
             return self.client.generate_json(

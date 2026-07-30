@@ -43,6 +43,7 @@ class Argument:
     name: str = ""
     intro: str = ""
     conclusion: str = ""
+    entry_point: str = ""
     path: Path | None = field(default=None, init=False)
     _premises: dict[str, Premise] = field(default_factory=dict, repr=False)
     
@@ -97,10 +98,10 @@ class Argument:
     
     def get_next_premise(self, cache: set[str]) -> Premise | None:
         """Get the next unspoken premise.
-        
+
         Args:
             cache: Set of already spoken premise names.
-            
+
         Returns:
             Next premise to present, or None if all spoken.
         """
@@ -108,7 +109,65 @@ class Argument:
             if name not in cache and premise.is_complete:
                 return premise
         return None
+
+    def next_premise(self, current_name: str, outcome: str = "agree") -> str | None:
+        """Return the name of the next premise to visit after *current_name*.
+
+        Resolution order:
+
+        1. If the current premise has an explicit ``on_agree`` / ``on_disagree``
+           target (depending on *outcome*), use it.
+        2. If the current premise has ``ChoiceOption`` entries that carry a
+           ``next_premise`` name for the chosen outcome, use the first match.
+        3. Fall back to the insertion-order successor (linear behaviour,
+           preserving backwards compatibility with flat argument files).
+
+        Args:
+            current_name: Name of the premise just presented.
+            outcome: Semantic outcome — ``"agree"``, ``"disagree"``,
+                ``"clarify"``, or ``"skip"``.  Only ``"agree"`` and
+                ``"disagree"`` are used for branch resolution; everything
+                else follows linear order.
+
+        Returns:
+            Name of the next premise, or ``None`` if the argument is finished.
+        """
+        current = self._premises.get(current_name)
+        if current is None:
+            return None
+
+        # 1. Explicit on_agree / on_disagree branch
+        if outcome == "agree" and current.on_agree:
+            return current.on_agree if current.on_agree in self._premises else None
+        if outcome == "disagree" and current.on_disagree:
+            return current.on_disagree if current.on_disagree in self._premises else None
+
+        # 2. ChoiceOption.next_premise for this outcome
+        for choice in current.choices:
+            if choice.outcome == outcome and choice.next_premise:
+                if choice.next_premise in self._premises:
+                    return choice.next_premise
+
+        # 3. Linear fallback — insertion-order successor
+        names = list(self._premises.keys())
+        try:
+            idx = names.index(current_name)
+        except ValueError:
+            return None
+        next_idx = idx + 1
+        return names[next_idx] if next_idx < len(names) else None
     
+    def to_graph(self) -> "GraphData":
+        """Extract the directed graph structure of this argument.
+
+        Returns:
+            A :class:`~difficult_dialogs.graph.GraphData` instance with
+            nodes (premises), edges (agree/disagree/choice/linear), and
+            the optional entry point.
+        """
+        from difficult_dialogs.graph import build_graph
+        return build_graph(self)
+
     def load(self, path: str | Path) -> Argument:
         """Load argument from a directory structure.
 
@@ -242,6 +301,7 @@ class Argument:
                 (premise.how,        ".how"),
                 (premise.when,       ".when"),
                 (premise.where,      ".where"),
+                (premise.who,        ".who"),
             ]
 
             for items, ext in _FIELDS:
@@ -249,6 +309,27 @@ class Argument:
                     continue
                 lines = [str(item) for item in items]
                 (pdir / f"{premise.name}{ext}").write_text("\n".join(lines))
+
+            # Write choices file
+            if premise.choices:
+                choice_lines: list[str] = []
+                for opt in premise.choices:
+                    line = f"{opt.label}) {opt.text}"
+                    if opt.next_premise:
+                        line += f" -> {opt.next_premise}"
+                    else:
+                        # record non-default outcomes explicitly
+                        from difficult_dialogs.choices import _POSITIONAL_OUTCOMES
+                        default = _POSITIONAL_OUTCOMES.get(opt.label, "agree")
+                        if opt.outcome != default:
+                            line += f" [{opt.outcome}]"
+                    choice_lines.append(line)
+                (pdir / f"{premise.name}.choices").write_text("\n".join(choice_lines))
+
+            if premise.on_agree:
+                (pdir / f"{premise.name}.on_agree").write_text(premise.on_agree)
+            if premise.on_disagree:
+                (pdir / f"{premise.name}.on_disagree").write_text(premise.on_disagree)
 
         self.path = dest
         return dest
@@ -259,13 +340,16 @@ class Argument:
         Returns:
             Dictionary with argument data.
         """
-        return {
+        d: dict[str, Any] = {
             "name": self.name,
             "intro": self.intro,
             "conclusion": self.conclusion,
             "premises": [p.to_dict() for p in self.premises],
             "is_true": self.is_true,
         }
+        if self.entry_point:
+            d["entry_point"] = self.entry_point
+        return d
     
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Argument:
@@ -281,12 +365,13 @@ class Argument:
             name=data.get("name", ""),
             intro=data.get("intro", ""),
             conclusion=data.get("conclusion", ""),
+            entry_point=data.get("entry_point", ""),
         )
-        
+
         for premise_data in data.get("premises", []):
             premise = Premise.from_dict(premise_data)
             arg.add_premise(premise)
-        
+
         return arg
     
     def diff(self, other: Argument) -> dict[str, Any]:
@@ -334,6 +419,67 @@ class Argument:
             "removed_premises": removed_premises,
             "modified_premises": modified_premises,
         }
+
+    @classmethod
+    def merge(
+        cls,
+        *args: Argument,
+        name: str = "",
+        intro: str = "",
+        conclusion: str = "",
+        on_conflict: str = "keep_first",
+    ) -> Argument:
+        """Merge premises from multiple arguments into a new Argument.
+
+        Premises with duplicate names are handled according to *on_conflict*:
+
+        - ``"keep_first"`` — first occurrence wins (default).
+        - ``"keep_last"``  — last occurrence wins.
+        - ``"error"``      — raise ``ValueError`` on first duplicate name.
+
+        The merged argument's *name*, *intro*, and *conclusion* may be
+        provided explicitly; otherwise they fall back to the first argument's
+        values.
+
+        Args:
+            *args: Two or more Argument instances to merge.
+            name: Name for the merged argument (optional).
+            intro: Intro text (optional, falls back to first arg).
+            conclusion: Conclusion text (optional, falls back to first arg).
+            on_conflict: Conflict resolution strategy.
+
+        Returns:
+            New Argument containing all (or winning) premises.
+
+        Raises:
+            ValueError: If fewer than two arguments are given, or
+                        *on_conflict* is ``"error"`` and a duplicate is found.
+        """
+        if len(args) < 2:
+            raise ValueError("merge() requires at least two arguments")
+        if on_conflict not in ("keep_first", "keep_last", "error"):
+            raise ValueError(f"Unknown on_conflict strategy: {on_conflict!r}")
+
+        merged = cls(
+            name=name or args[0].name,
+            intro=intro or args[0].intro,
+            conclusion=conclusion or args[0].conclusion,
+        )
+
+        for source in args:
+            for premise in source.premises:
+                if premise.name in merged._premises:
+                    if on_conflict == "error":
+                        raise ValueError(
+                            f"Duplicate premise name {premise.name!r} "
+                            f"found while merging arguments"
+                        )
+                    if on_conflict == "keep_first":
+                        continue  # skip duplicate
+                    # keep_last: fall through to overwrite
+                merged._premises[premise.name] = premise
+
+        return merged
 
     def __bool__(self) -> bool:
         """Return whether this argument is currently accepted as true."""

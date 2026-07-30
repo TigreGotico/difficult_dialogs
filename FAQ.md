@@ -1,70 +1,152 @@
 # FAQ — difficult_dialogs
 
-## What is difficult_dialogs?
+## General
 
-A Python library for building structured, interactive debates using plain-text file-based argument definitions and pluggable policy engines.
+**Q: What is difficult_dialogs?**
+A: A structured, file-based argumentation framework. Arguments are stored as plain-text directories; pluggable policies drive turn-by-turn dialogs.
 
----
+**Q: Does it require an LLM or internet connection?**
+A: No. The core library (`policy.py`, `premises.py`, `arguments.py`) has zero runtime dependencies. LLM features in `difficult_dialogs/llm/` are opt-in.
 
-## Data model
+**Q: What Python versions are supported?**
+A: Python 3.10+.
 
-**Q: What is the hierarchy?**
-`Statement` → `Premise` → `Argument`. Statements hold a claim and an `agreed` flag. A Premise is a group of statements plus Five-Ws metadata. An Argument is an ordered collection of premises with an intro and conclusion.
+## Arguments
 
-**Q: What are the Five-Ws fields?**
-Each `Premise` carries `what`, `why`, `how`, `when`, `where` lists. These answer user questions during a debate without needing an LLM at runtime. Defined in `difficult_dialogs/premises.py`.
+**Q: How do I create an argument programmatically?**
+A: Use `ArgumentBuilder` — `difficult_dialogs/builder.py`:
+```python
+from difficult_dialogs.builder import ArgumentBuilder
+arg = (
+    ArgumentBuilder("topic")
+    .intro("Opening statement.")
+    .premise("claim").statement("Evidence.").why("Reason.").done()
+    .build()
+)
+```
 
-**Q: How is an argument stored on disk?**
-One directory per argument. `intro.dialog` and `conclusion.conclusion` at the root. One subdirectory per premise, each containing `<name>.premise`, `<name>.support`, `<name>.source`, and any of the Five-Ws extension files (`.what`, `.why`, `.how`, `.when`, `.where`). See `Argument.load()` — `difficult_dialogs/arguments.py:108`.
+**Q: What is the Five Ws + How system?**
+A: Each premise supports six contextual fields: `what`, `why`, `how`, `when`, `where`, `who`. Policies that implement `_check_five_w()` detect these keywords in user input and return the matching answer from the current premise. Defined in `premises.py:Premise`.
 
----
+**Q: What happens if a `.premise` file is empty?**
+A: The premise is skipped — `Premise.is_complete` (`premises.py:56`) returns `False` and `Argument.load()` (`arguments.py`) will not add it.
 
 ## Policies
 
-**Q: How many policies are there?**
-10 total: `KnowItAllPolicy`, `SilentPolicy`, `SocraticPolicy`, `DebatePolicy`, `ExploratoryPolicy` (in `policy.py`) and `MaieuticPolicy`, `SkepticPolicy`, `TeacherPolicy`, `DebaterPolicy`, `MinimalistPolicy` (in `policies.py`).
+**Q: Which policy should I use?**
+A: `KnowItAllPolicy` is the default for interactive persuasion. `SilentPolicy` for one-way presentation. `AdaptivePolicy` when you want the bot to soften its approach after repeated disagreements.
 
-**Q: What is the difference between `SocraticPolicy` and `MaieuticPolicy`?**
-`SocraticPolicy` (policy.py) asks generic probing questions. `MaieuticPolicy` (policies.py) injects the argument's topic into question templates — more contextually grounded guided discovery.
+**Q: How do I chain multiple arguments into one session?**
+A: Use `MultiArgumentPolicy` from `policy.py`:
+```python
+policy = MultiArgumentPolicy([(arg1, "knowitall"), (arg2, "silent")])
+```
 
-**Q: How do I select a policy by name?**
-`get_policy("teacher", argument)` — imported from `difficult_dialogs.policies`. Raises `InvalidPolicyError` for unknown names. See `policies.py:435`.
+**Q: Can I save and restore a session?**
+A: Yes — two levels of convenience. Quick file persistence: `policy.save_state("session.json")` / `policy.load_state("session.json")` (`BasePolicy.save_state` — `policy.py`). For key-value stores (Redis, DB): `PolicyState.to_dict()` / `PolicyState.from_dict()` produce JSON-safe dicts; restore with `policy.restore_state(state_dict)`.
 
-**Q: How does Five-Ws dispatch work at runtime?**
-`BasePolicy._check_five_w(user_input)` — `policy.py:140`. Checks the lowercased input for `what/why/how/when/where` keywords against the current premise's lists. Returns a random answer if found, else `None`.
+**Q: Can I switch the active policy mid-conversation?**
+A: Yes. `AdaptivePolicy.set_policy(new_policy_instance)` transfers all state and activates the new policy immediately (`policy.py:AdaptivePolicy.set_policy`).
 
-**Q: Can I run a policy as a generator (no UI loop)?**
-`policy.run_sync()` is a Python generator using the coroutine-send protocol. `policy.stream(queue)` is an asyncio async generator that reads from an `asyncio.Queue`. Both delegate to `handle_input()`. Defined in `policy.py:195` and `policy.py:220`.
+**Q: How do I run the dialog in a loop?**
+A: Use `policy.run_sync()` — a generator that yields bot responses and accepts user input via `.send()`:
+```python
+gen = policy.run_sync()
+response = next(gen)
+while response:
+    response = gen.send(input("USER: "))
+```
 
----
+## Export & Library
 
-## CLI
+**Q: How do I export an argument?**
+A: Use `difficult_dialogs.export`:
+```python
+from difficult_dialogs.export import export_to_json, export_to_markdown
+export_to_json(arg, "argument.json")
+md = export_to_markdown(arg)
+```
 
-**Q: What commands are available?**
-`generate`, `validate`, `export`, `debate`, `list`. Run `python -m difficult_dialogs.cli --help`.
+**Q: How do I search across many arguments?**
+A: Use `ArgumentLibrary` (`library.py`):
+```python
+from difficult_dialogs.library import ArgumentLibrary
+lib = ArgumentLibrary("arguments/").scan()
+results = lib.search("climate change")
+```
 
-**Q: How do I run an interactive debate?**
-`python -m difficult_dialogs.cli debate path/to/argument/ --policy teacher`
+## Server / CLI
 
----
+**Q: How do I run the REST API?**
+A: `did serve --host 0.0.0.0 --port 8080` — dynamically loads `examples/server.py` (FastAPI demo app, not part of the library).
 
-## LLM generation
+**Q: How do I list available CLI commands?**
+A: `did --help`.
 
-**Q: Does difficult_dialogs require an LLM?**
-No. LLM is optional — only needed for `generate` CLI command and `LLMEnhancer`. All debate logic runs offline.
+**Q: Can I run a debate non-interactively (from a script or CI)?**
+A: Yes. Use `did debate ARG_DIR --input-file turns.txt` where `turns.txt` has one user turn per line. Output goes to stdout.
 
-**Q: What LLM servers are supported?**
-Any OpenAI-compatible API (Llama.cpp, Ollama, LM Studio, OpenAI itself). Configured via `--server` flag or `ArgumentGenerator(base_url=...)`.
+**Q: How do I validate argument quality?**
+A: `ArgumentValidator` (importable from `difficult_dialogs`) scores arguments and returns a `ValidationResult` with per-issue severity. Also available via CLI: `did validate ARG_DIR`.
 
-**Q: Why are so many API calls made per argument?**
-By design — one call per concern (metadata, per-premise statements, Five-Ws, support, sources). This keeps each prompt small and within reach of smaller models.
+**Q: How do I use a custom yes/no solver (e.g. for non-English)?**
+A: Call `set_solver(my_solver)` or `configure(plugin_name)` from `difficult_dialogs` at startup to replace the default OPM plugin.
 
----
+## Multiple Choice & Branching
 
-## Export
+**Q: How do I add multiple-choice options to a premise?**
+A: Add a `.choices` file in the premise directory, one option per line:
+```
+A) I agree completely -> next_premise
+B) I need more evidence [clarify]
+C) I disagree [disagree]
+```
+Or use the builder: `PremiseBuilder.choice(text, outcome, next_premise)`.
+Use `MultiChoicePolicy` to present the menu to users.
 
-**Q: What export formats are supported?**
-JSON bundle (`export_to_json`, `export_library_to_json`) and SQLite (`LibraryDatabase`, `export_to_sqlite`). Defined in `difficult_dialogs/export.py`.
+**Q: How do I make arguments branch instead of going linearly?**
+A: Add `.on_agree` and/or `.on_disagree` files to any premise, each containing the name of the next premise to visit:
+```
+# human_causation.on_agree
+economic_impacts
+```
+Or via the builder: `PremiseBuilder.on_agree("economic_impacts")`. The argument becomes a directed graph; existing arguments without these files remain linear.
 
-**Q: Does SQLite export preserve Five-Ws fields?**
-Yes — `support` and `five_ws` tables were added. `get_argument()` restores all fields. See `export.py:200` (schema) and `export.py:400` (restore).
+**Q: How do I start a non-linear argument at a specific premise instead of the first one?**
+A: Set `entry_point` on the argument to the name of the premise you want to start at:
+```python
+arg = (
+    ArgumentBuilder("topic")
+    .entry_point("second_premise")
+    .premise("first_premise").statement("...").done()
+    .premise("second_premise").statement("...").done()
+    .build()
+)
+```
+`BasePolicy.start()` reads `argument.entry_point` and seeds `state.current_premise` from it. Without `entry_point`, the dialog starts at the insertion-order first premise.
+
+**Q: What happens if `on_agree` points to a premise that doesn't exist?**
+A: `Argument.next_premise()` returns `None` — the policy will end the dialog. Always validate argument graphs with `did validate` or `ArgumentValidator`.
+
+**Q: Can I mix branching and linear premises in the same argument?**
+A: Yes. Only premises with `.on_agree`/`.on_disagree` branch; the rest follow insertion order. The traversal falls back to linear for any edge without an explicit target.
+
+**Q: How do I visualize an argument's branching structure?**
+A: Use `did graph`:
+```bash
+did graph my_argument/                          # Mermaid (default)
+did graph my_argument/ --format dot             # Graphviz DOT
+did graph my_argument/ --format json            # JSON for D3/Cytoscape
+did graph my_argument/ -o graph.md              # write to file
+```
+Or in Python: `graph = argument.to_graph()` returns a `GraphData` object, then pass to `to_mermaid(graph)`, `to_dot(graph)`, or `to_graph_json(graph)`.
+
+**Q: How do I export arguments to CSV for analysis?**
+A: Use `did export --format csv`:
+```bash
+did export examples/sample_arguments/ corpus.csv --format csv
+```
+Or in Python: `export_to_csv(argument, "output.csv")` for a single argument, `export_library_to_csv(root, "corpus.csv")` for a whole library. Output is one row per statement (long format), ready for pandas.
+
+**Q: How do I plug in an OPM reranker/multiple_choice solver?**
+A: Implement `ChoiceSolverProtocol` (`choices.py`) and pass it to `MultiChoicePolicy(arg, choice_solver=my_solver)`. A future version will auto-discover OPM `opm.agents.reranker` plugins the same way yes/no solvers are discovered via `opm.agents.yesno`.

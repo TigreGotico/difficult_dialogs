@@ -1,43 +1,52 @@
-# AUDIT — difficult_dialogs
+# Audit — difficult_dialogs
 
-Known issues, technical debt, and security notes. All citations include `file.py:LINE`.
+Evidence-based list of known issues, technical debt, and security considerations.
 
 ---
 
 ## Open Issues
 
-### `export/json.py:117-118` — load warning silently swallowed
-`export_library_to_json` catches all exceptions and prints a warning instead of propagating. Bad arguments are silently skipped with no way for callers to detect partial failures.
-- **Severity**: Low (intentional bulk-export design; callers can inspect returned bundle)
-- **File**: `difficult_dialogs/export/json.py:117`
+### A-01 — `cmd_debate` does not call `policy.respond()` (uses `handle_input` directly)
+**File:** `difficult_dialogs/cli.py:251`
+**Severity:** Low
+**Detail:** `cmd_debate` calls `policy.handle_input(user_input)` directly, bypassing
+`policy.respond()` which also appends the user turn to `state.transcript`.
+User turns therefore do not appear in the transcript when using the CLI.
+**Fix:** Replace `policy.handle_input(user_input)` with `policy.respond(user_input)`.
 
-~~`export/sqlite.py` — `_get_argument_id` returns 0 on miss~~ — resolved: now raises `KeyError`.
+### A-02 — `WebhookPolicy` has no timeout on HTTP calls
+**File:** `difficult_dialogs/policy.py:WebhookPolicy`
+**Severity:** Medium
+**Detail:** The `requests.post` call in `WebhookPolicy.handle_input` uses the
+default `requests` timeout (None — blocks forever). A slow or unreachable
+webhook will hang the entire dialog loop.
+**Fix:** Add `timeout=` parameter; expose it as a constructor argument.
 
-~~`validators.py:209` — unreachable duplicate-premise-name branch~~ — resolved: dead code removed.
+### A-03 — `ArgumentLibrary.search` uses naïve token overlap scoring
+**File:** `difficult_dialogs/library.py`
+**Severity:** Info
+**Detail:** Search scoring is simple token intersection.  Phrase order and
+proximity are not considered, leading to poor ranking on short or ambiguous
+queries.  Acceptable for v0.x; consider BM25 or vector embeddings for v1.
 
-~~`arguments.py:207` — dead `continue` in `_load_legacy_format`~~ — resolved: legacy format removed.
+### A-04 — `export_to_sqlite` does not close connection on exception
+**File:** `difficult_dialogs/export/sqlite.py`
+**Severity:** Low
+**Detail:** If `add_argument()` raises mid-export the `LibraryDatabase`
+connection is not closed.  Use a context manager or try/finally.
 
-~~`policy.py:58` — abstract method body is `pass`~~ — resolved: now raises `NotImplementedError`.
+### A-05 — No rate-limiting or session cap in `examples/server.py`
+**File:** `examples/server.py`
+**Severity:** Info (demo code)
+**Detail:** The in-process `_sessions` dict has no size cap; a large number of
+unclosed sessions will grow memory unbounded.  Acceptable for the demo; any
+production deployment should add a TTL eviction layer.
 
 ---
 
-## Technical Debt
+## Resolved
 
-~~Dual policy modules~~ — resolved: all 10 policy classes, `POLICY_REGISTRY`, and `get_policy` merged into `policy.py`; `policies.py` deleted.
-
-~~`export.py` size~~ — resolved: split into `export/json.py`, `export/sqlite.py`, `export/__init__.py`.
-
-### `cli.py:cmd_generate` depends on live LLM
-`cmd_generate` has no dry-run or offline mode. Integration tests must mock the entire `ArgumentGenerator` stack. Consider a `--dry-run` flag that validates server connectivity only.
-
-### No input sanitization in `cli.py:cmd_debate`
-`user_input` from `input()` is passed directly to `handle_input()`. For multi-user or web deployments this is fine (all local), but worth noting for any future web exposure.
-
----
-
-## Security Notes
-
-- All file reads in `Argument.load()` use `Path.read_text()` — no shell execution, no injection risk.
-- `LLMClient` uses `urllib.request` with explicit `Content-Type` header and JSON encoding — no shell command exposure.
-- SQLite export uses parameterized queries throughout (`?` placeholders) — no SQL injection risk.
-- LLM-generated content is stored as plain text and never executed — no prompt injection execution risk.
+| ID | Description | Fixed in |
+|----|-------------|----------|
+| R-01 | Six policy neutral branches unreachable due to `is_agreement(default=True)` | b211294 |
+| R-02 | `server.py` shipped as library code, blurring library/demo boundary | b891b9e |

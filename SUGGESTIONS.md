@@ -1,42 +1,71 @@
-# SUGGESTIONS — difficult_dialogs
+# Suggestions — difficult_dialogs
 
-Agent proposals for refactors and enhancements. Not yet approved or scheduled.
-
----
-
-## High Value
-
-### ~~1. Merge `policy.py` and `policies.py` into a single module~~ — DONE
-All 10 policy classes + `POLICY_REGISTRY` + `get_policy` now live in `policy.py`. `policies.py` deleted.
-
-### ~~2. Split `export.py` into focused modules~~ — DONE
-`export.py` (589 lines) split into `export/json.py` (JSON + encoder), `export/sqlite.py` (LibraryDatabase + export_to_sqlite), `export/__init__.py` (re-exports). Public API unchanged.
-
-### ~~3. Replace `_DISPATCH` dict with a single `Premise.apply_file()` method~~ — DONE
-`Premise.apply_file(path)` — `premises.py:127`. `Argument._apply_file_to_premise` removed.
+Agent proposals for future enhancements.  Not prioritised; discuss before implementing.
 
 ---
 
-## Medium Value
+## S-01 — Fix A-01: route `cmd_debate` through `policy.respond()`
 
-### 4. Add `--dry-run` to `cmd_generate`
-`cmd_generate` requires a live LLM server. A `--dry-run` flag that validates connectivity and prints what would be generated (without calling generate) would make the CLI testable without mocks.
+`cli.py:251` calls `handle_input` directly.  One-line fix: replace with
+`policy.respond(user_input)`.  Will make `--save-transcript` capture user
+turns correctly.
 
-### ~~5. `PolicyState` should track `challenge_count` per-premise~~ — DONE
-`PolicyState.challenge_count: int = 0` — `policy.py:29`. `DebatePolicy._challenge_count` removed.
+## S-02 — Add `timeout` to `WebhookPolicy`
 
-### ~~6. `Argument.from_directory()` class method~~ — DONE
-`Argument.from_directory(path)` — `arguments.py:167`.
+Constructor: `WebhookPolicy(url, fallback, timeout=10.0)`.  Pass to
+`requests.post(timeout=self.timeout)`.  Prevents indefinite hang on dead
+webhooks.  Low-risk change.
 
----
+## S-03 — `did replay FILE`
 
-## Low Value / Exploratory
+New CLI subcommand that reads a saved transcript JSON and replays it
+non-interactively, printing each turn.  Useful for regression testing without
+a live session.
 
-### ~~7. `Argument.diff(other)` method~~ — DONE
-`Argument.diff(other)` — `arguments.py`. Returns `{meta, added_premises, removed_premises, modified_premises}`.
+## S-04 — `ArgumentLibrary.watch(callback)`
 
-### ~~8. `export_to_markdown(argument, path)` function~~ — DONE
-`export_to_markdown(argument, output_path=None)` — `export/markdown.py`. Returns string; writes file when path given.
+Use `watchdog` (optional dep) to inotify-watch the library root and call
+`callback(event)` on `.dialog`/`.premise` file changes.  Enables hot-reload in
+long-running servers.
 
-### 9. Policy streaming via Server-Sent Events
-Add an optional `stream_sse(request)` adapter to `BasePolicy.stream()` so policies can be driven from a web frontend without a WebSocket.
+## S-05 — BM25 search in `ArgumentLibrary`
+
+Replace token-overlap scoring with BM25 (pure-Python `rank_bm25` package,
+~2 KB).  Improves ranking on short queries.  Would require adding `rank_bm25`
+as an optional dep.
+
+## S-06 — WebSocket endpoint in `examples/server.py`
+
+Add `GET /sessions/{id}/ws` — a WebSocket endpoint that streams bot responses
+character-by-character for low-latency UX.  Useful for OVOS voice integration.
+
+## S-07 — `Premise` i18n field
+
+Add `translations: dict[str, dict[str, str]]` to `Premise` dataclass so
+statements can be stored in multiple languages.  Needed for multi-language
+support (see ROADMAP v0.8).
+
+## S-09 — Auto-discover OPM choice solvers via `opm.agents.reranker`
+
+`choices.py` defines `ChoiceSolverProtocol` but loads no plugins automatically.
+Mirror `yesno.py`'s pattern exactly: add `_load_solver()` that tries the
+`opm.agents.reranker` (or `opm.agents.multiple_choice`) entry-point group, falls
+back to `_DefaultChoiceSolver` if nothing is installed.  OPM already has a
+compatible `multiple_choice`/reranker plugin.  Would make `MultiChoicePolicy`
+leverage semantic matching out-of-the-box with no user config.
+
+## S-10 — `ArgumentBuilder.branch()` shorthand for two-way branches
+
+`builder.on_agree("p_yes").on_disagree("p_no")` is verbose. A single
+`.branch(on_agree="p_yes", on_disagree="p_no")` method would be cleaner.
+
+## S-11 — Cycle detection in `ArgumentValidator`
+
+If `on_agree`/`on_disagree` create a cycle (premise A → B → A) the dialog
+loops forever. `ArgumentValidator` should detect cycles via DFS and report
+them as `CRITICAL` severity issues.
+
+## S-08 — `did score` shorthand
+
+`did score ARG_DIR` prints a single line: `score: 87%  [GOOD]`.  Useful in CI
+without parsing full `did validate` output.
