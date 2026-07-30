@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.0a2](https://github.com/TigreGotico/difficult_dialogs/tree/0.6.0a2) (2026-07-30)
+
+[Full Changelog](https://github.com/TigreGotico/difficult_dialogs/compare/0.6.0a1...0.6.0a2)
+
+**Merged pull requests:**
+
+- docs: rewrite README in Simplified Technical English [\#21](https://github.com/TigreGotico/difficult_dialogs/pull/21) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.6.0a1](https://github.com/TigreGotico/difficult_dialogs/tree/0.6.0a1) (2026-06-10)
 
 [Full Changelog](https://github.com/TigreGotico/difficult_dialogs/compare/0.5.1a1...0.6.0a1)
