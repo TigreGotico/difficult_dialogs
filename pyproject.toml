@@ -30,7 +30,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
-    "ovos-plugin-manager>=0.0.1",
+    "ovos-plugin-manager>=2.2.0",
     "ovos-solver-yes-no-plugin",
     "ovos-solver-bm25-plugin",
     "rank-bm25>=0.2.2",
