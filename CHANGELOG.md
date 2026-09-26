@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.1a1](https://github.com/TigreGotico/difficult_dialogs/tree/0.6.1a1) (2026-09-26)
+
+[Full Changelog](https://github.com/TigreGotico/difficult_dialogs/compare/0.6.0a2...0.6.1a1)
+
+**Merged pull requests:**
+
+- fix\(deps\): raise the ovos-plugin-manager floor above the pkg\_resources import [\#26](https://github.com/TigreGotico/difficult_dialogs/pull/26) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [0.6.0a2](https://github.com/TigreGotico/difficult_dialogs/tree/0.6.0a2) (2026-07-30)
 
 [Full Changelog](https://github.com/TigreGotico/difficult_dialogs/compare/0.6.0a1...0.6.0a2)
