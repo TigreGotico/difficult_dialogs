@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.1a2](https://github.com/TigreGotico/difficult_dialogs/tree/0.6.1a2) (2026-09-28)
+
+[Full Changelog](https://github.com/TigreGotico/difficult_dialogs/compare/0.6.1a1...0.6.1a2)
+
+**Merged pull requests:**
+
+- ci: delete the deprecated python-support.yml, which cannot start [\#29](https://github.com/TigreGotico/difficult_dialogs/pull/29) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [0.6.1a1](https://github.com/TigreGotico/difficult_dialogs/tree/0.6.1a1) (2026-09-26)
 
 [Full Changelog](https://github.com/TigreGotico/difficult_dialogs/compare/0.6.0a2...0.6.1a1)
