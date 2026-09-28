@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.1a3](https://github.com/TigreGotico/difficult_dialogs/tree/0.6.1a3) (2026-09-28)
+
+[Full Changelog](https://github.com/TigreGotico/difficult_dialogs/compare/0.6.1a2...0.6.1a3)
+
+**Merged pull requests:**
+
+- chore: let Renovate rebase a pull request that is behind dev [\#31](https://github.com/TigreGotico/difficult_dialogs/pull/31) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [0.6.1a2](https://github.com/TigreGotico/difficult_dialogs/tree/0.6.1a2) (2026-09-28)
 
 [Full Changelog](https://github.com/TigreGotico/difficult_dialogs/compare/0.6.1a1...0.6.1a2)
