@@ -640,5 +640,129 @@ class TestValidateDirectoryBranches:
         assert any("Failed to load" in i.message for i in result.issues)
 
 
+class TestGraphValidation:
+    """Tests for _validate_graph — dangling references and cycle detection."""
+
+    def _make_validator(self) -> ArgumentValidator:
+        return ArgumentValidator()
+
+    def test_clean_branching_arg_passes(self) -> None:
+        from difficult_dialogs.builder import ArgumentBuilder
+        arg = (
+            ArgumentBuilder("t")
+            .intro("A" * 60)
+            .conclusion("B" * 60)
+            .premise("p1").statement("s").branch(on_agree="p2", on_disagree="p3").done()
+            .premise("p2").statement("s").done()
+            .premise("p3").statement("s").done()
+            .build()
+        )
+        result = validate_argument(arg)
+        graph_issues = [i for i in result.issues if i.category == "graph"]
+        assert graph_issues == []
+
+    def test_dangling_on_agree(self) -> None:
+        from difficult_dialogs.builder import ArgumentBuilder
+        arg = (
+            ArgumentBuilder("t")
+            .intro("A" * 60)
+            .conclusion("B" * 60)
+            .premise("p1").statement("s").on_agree("nonexistent").done()
+            .build()
+        )
+        result = ArgumentValidator().validate(arg)
+        errors = [i for i in result.issues if i.category == "graph" and i.severity == ValidationSeverity.ERROR]
+        assert any("nonexistent" in i.message for i in errors)
+
+    def test_dangling_on_disagree(self) -> None:
+        from difficult_dialogs.builder import ArgumentBuilder
+        arg = (
+            ArgumentBuilder("t")
+            .intro("A" * 60)
+            .conclusion("B" * 60)
+            .premise("p1").statement("s").on_disagree("ghost").done()
+            .build()
+        )
+        result = ArgumentValidator().validate(arg)
+        errors = [i for i in result.issues if i.category == "graph" and i.severity == ValidationSeverity.ERROR]
+        assert any("ghost" in i.message for i in errors)
+
+    def test_dangling_choice_next_premise(self) -> None:
+        from difficult_dialogs.builder import ArgumentBuilder
+        arg = (
+            ArgumentBuilder("t")
+            .intro("A" * 60)
+            .conclusion("B" * 60)
+            .premise("p1").statement("s").choice("Go", next_premise="phantom").done()
+            .build()
+        )
+        result = ArgumentValidator().validate(arg)
+        errors = [i for i in result.issues if i.category == "graph" and i.severity == ValidationSeverity.ERROR]
+        assert any("phantom" in i.message for i in errors)
+
+    def test_cycle_two_nodes(self) -> None:
+        """p1 → p2 → p1 is a cycle."""
+        from difficult_dialogs.builder import ArgumentBuilder
+        arg = (
+            ArgumentBuilder("cycle")
+            .intro("A" * 60)
+            .conclusion("B" * 60)
+            .premise("p1").statement("s").on_agree("p2").done()
+            .premise("p2").statement("s").on_agree("p1").done()
+            .build()
+        )
+        result = ArgumentValidator().validate(arg)
+        critical = [i for i in result.issues if i.severity == ValidationSeverity.CRITICAL and i.category == "graph"]
+        assert critical, "Expected CRITICAL cycle issue"
+        assert any("p1" in i.message or "p2" in i.message for i in critical)
+        assert not result.passed
+
+    def test_cycle_self_loop(self) -> None:
+        """A premise pointing to itself."""
+        from difficult_dialogs.builder import ArgumentBuilder
+        arg = (
+            ArgumentBuilder("self_loop")
+            .intro("A" * 60)
+            .conclusion("B" * 60)
+            .premise("p1").statement("s").on_agree("p1").done()
+            .build()
+        )
+        result = ArgumentValidator().validate(arg)
+        critical = [i for i in result.issues if i.severity == ValidationSeverity.CRITICAL and i.category == "graph"]
+        assert critical
+
+    def test_diamond_graph_no_false_positive(self) -> None:
+        """Diamond-shaped graph (two paths to same leaf) must NOT report a cycle."""
+        from difficult_dialogs.builder import ArgumentBuilder
+        arg = (
+            ArgumentBuilder("diamond")
+            .intro("A" * 60)
+            .conclusion("B" * 60)
+            .premise("root").statement("s").on_agree("left").on_disagree("right").done()
+            .premise("left").statement("s").on_agree("leaf").done()
+            .premise("right").statement("s").on_agree("leaf").done()
+            .premise("leaf").statement("s").done()
+            .build()
+        )
+        result = ArgumentValidator().validate(arg)
+        critical = [i for i in result.issues if i.severity == ValidationSeverity.CRITICAL and i.category == "graph"]
+        assert critical == [], f"False positive cycle detection on diamond graph: {critical}"
+
+    def test_no_branching_arg_passes_graph_check(self) -> None:
+        """Flat arguments with no graph edges pass silently."""
+        from difficult_dialogs.builder import ArgumentBuilder
+        arg = (
+            ArgumentBuilder("flat")
+            .intro("A" * 60)
+            .conclusion("B" * 60)
+            .premise("p1").statement("s1").done()
+            .premise("p2").statement("s2").done()
+            .build()
+        )
+        result = ArgumentValidator().validate(arg)
+        graph_issues = [i for i in result.issues if i.category == "graph"]
+        assert graph_issues == []
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

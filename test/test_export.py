@@ -533,3 +533,90 @@ class TestExportToMarkdown:
         arg = Argument(name="empty")
         md = export_to_markdown(arg)
         assert "# Empty" in md
+
+
+# ---------------------------------------------------------------------------
+# Transcript export
+# ---------------------------------------------------------------------------
+
+def test_export_transcript_to_markdown(tmp_path: Path) -> None:
+    """export_transcript_to_markdown returns formatted markdown string."""
+    from difficult_dialogs.export.transcript import export_transcript_to_markdown
+    from difficult_dialogs.policy import KnowItAllPolicy
+    from difficult_dialogs.arguments import Argument
+    from difficult_dialogs.premises import Premise
+
+    arg = Argument(name="test_arg", intro="Hello.", conclusion="Goodbye.")
+    p = Premise(name="p1")
+    p.add_statement("s1")
+    arg.add_premise(p)
+
+    policy = KnowItAllPolicy(arg)
+    policy.start()
+    policy.respond("yes")
+
+    md = export_transcript_to_markdown(policy)
+    assert "**Bot:**" in md
+    assert "**User:**" in md
+    assert "Transcript" in md
+
+
+def test_export_transcript_to_markdown_writes_file(tmp_path: Path) -> None:
+    """export_transcript_to_markdown writes file when output_path given."""
+    from difficult_dialogs.export.transcript import export_transcript_to_markdown
+    from difficult_dialogs.policy import KnowItAllPolicy, PolicyState, TranscriptEntry
+
+    state = PolicyState(transcript=[
+        TranscriptEntry(role="bot", text="Hi"),
+        TranscriptEntry(role="user", text="Hello"),
+    ])
+    out = tmp_path / "transcript.md"
+    result = export_transcript_to_markdown(state, output_path=out)
+    assert out.exists()
+    assert out.read_text() == result
+
+
+def test_export_transcript_to_json(tmp_path: Path) -> None:
+    """export_transcript_to_json returns list of dicts."""
+    from difficult_dialogs.export.transcript import export_transcript_to_json
+    from difficult_dialogs.policy import PolicyState, TranscriptEntry
+
+    state = PolicyState(transcript=[
+        TranscriptEntry(role="bot", text="Hello"),
+        TranscriptEntry(role="user", text="Hi"),
+    ])
+    entries = export_transcript_to_json(state)
+    assert len(entries) == 2
+    assert entries[0] == {"role": "bot", "text": "Hello"}
+    assert entries[1] == {"role": "user", "text": "Hi"}
+
+
+def test_export_transcript_to_json_writes_file(tmp_path: Path) -> None:
+    """export_transcript_to_json writes JSON file when path given."""
+    import json
+    from difficult_dialogs.export.transcript import export_transcript_to_json
+    from difficult_dialogs.policy import PolicyState, TranscriptEntry
+
+    state = PolicyState(transcript=[TranscriptEntry(role="bot", text="done")])
+    out = tmp_path / "transcript.json"
+    export_transcript_to_json(state, output_path=out)
+    assert out.exists()
+    data = json.loads(out.read_text())
+    assert data[0]["text"] == "done"
+
+
+def test_export_transcript_empty(tmp_path: Path) -> None:
+    """Empty transcript produces a valid placeholder document."""
+    from difficult_dialogs.export.transcript import export_transcript_to_markdown
+    from difficult_dialogs.policy import PolicyState
+
+    md = export_transcript_to_markdown(PolicyState())
+    assert "no turns" in md
+
+
+def test_export_transcript_bad_type() -> None:
+    """Passing a non-policy/state raises TypeError."""
+    from difficult_dialogs.export.transcript import export_transcript_to_markdown
+    import pytest
+    with pytest.raises(TypeError):
+        export_transcript_to_markdown("not a policy")  # type: ignore

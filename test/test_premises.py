@@ -1,5 +1,17 @@
 """Unit tests for difficult_dialogs.premises.Premise."""
+import pytest
+from pathlib import Path
+from difficult_dialogs.arguments import Argument
 from difficult_dialogs.premises import Premise
+
+
+@pytest.fixture
+def sample_arg() -> Argument:
+    arg = Argument(name="test", intro="I.", conclusion="C.")
+    p = Premise(name="p1")
+    p.add_statement("s1")
+    arg.add_premise(p)
+    return arg
 
 
 def test_default_true() -> None:
@@ -220,3 +232,159 @@ def test_str_is_description() -> None:
     """String representation is description."""
     p = Premise(name="my claim", description="My claim description")
     assert str(p) == "My claim description"
+
+
+def test_add_who() -> None:
+    """add_who() populates the who list."""
+    p = Premise(name="test")
+    p.add_who("Scientists and public health officials")
+    assert "Scientists and public health officials" in p.who
+
+
+def test_who_round_trip_dict() -> None:
+    """who field survives to_dict / from_dict."""
+    p = Premise(name="test")
+    p.add_who("Everyone")
+    p2 = Premise.from_dict(p.to_dict())
+    assert p2.who == ["Everyone"]
+
+
+def test_who_loaded_from_file(tmp_path: Path) -> None:
+    """apply_file dispatches .who extension to add_who."""
+    who_file = tmp_path / "p.who"
+    who_file.write_text("Affected parties\nExperts\n")
+    p = Premise(name="p")
+    p.apply_file(who_file)
+    assert p.who == ["Affected parties", "Experts"]
+
+
+def test_check_five_w_who(sample_arg: Argument) -> None:
+    """_check_five_w returns who answer when 'who' is in user input."""
+    from difficult_dialogs.policy import KnowItAllPolicy
+    premise = sample_arg.premises[0]
+    premise.add_who("All citizens")
+    policy = KnowItAllPolicy(sample_arg)
+    policy.start()
+    policy.state.current_premise = premise.name
+    response = policy.handle_input("who is affected by this")
+    assert response == "All citizens"
+
+
+# ---------------------------------------------------------------------------
+# Premise.translations — i18n field
+# ---------------------------------------------------------------------------
+
+class TestPremiseTranslations:
+    """Tests for Premise.translations and related helpers."""
+
+    def _make_premise(self) -> "Premise":
+        from difficult_dialogs.premises import Premise
+        p = Premise(name="test")
+        p.add_statement("Computers process information.")
+        p.add_translation("es-ES", "statements", "Los ordenadores procesan información.")
+        return p
+
+    def test_add_translation_stored(self) -> None:
+        p = self._make_premise()
+        assert "es-ES" in p.translations
+        assert "statements" in p.translations["es-ES"]
+        assert "Los ordenadores procesan información." in p.translations["es-ES"]["statements"]
+
+    def test_get_statements_default_lang(self) -> None:
+        p = self._make_premise()
+        stmts = p.get_statements()
+        assert "Computers process information." in stmts
+
+    def test_get_statements_translated(self) -> None:
+        p = self._make_premise()
+        stmts = p.get_statements(lang="es-ES")
+        assert "Los ordenadores procesan información." in stmts
+
+    def test_get_statements_falls_back_when_no_translation(self) -> None:
+        p = self._make_premise()
+        stmts = p.get_statements(lang="fr-FR")
+        assert "Computers process information." in stmts
+
+    def test_to_dict_includes_translations(self) -> None:
+        p = self._make_premise()
+        d = p.to_dict()
+        assert "translations" in d
+        assert "es-ES" in d["translations"]
+
+    def test_from_dict_round_trip(self) -> None:
+        from difficult_dialogs.premises import Premise
+        p = self._make_premise()
+        p2 = Premise.from_dict(p.to_dict())
+        assert p2.translations == p.translations
+
+    def test_to_dict_omits_translations_when_empty(self) -> None:
+        from difficult_dialogs.premises import Premise
+        p = Premise(name="plain")
+        p.add_statement("Statement.")
+        assert "translations" not in p.to_dict()
+
+    def test_apply_file_locale_specific(self, tmp_path) -> None:
+        """apply_file detects locale-specific filename pattern."""
+        from difficult_dialogs.premises import Premise
+        f = tmp_path / "my_premise.es-ES.premise"
+        f.write_text("Una afirmación en español.")
+        p = Premise(name="my_premise")
+        p.apply_file(f)
+        assert "es-ES" in p.translations
+        assert "Una afirmación en español." in p.translations["es-ES"]["premise"]
+
+    def test_apply_file_normal_not_affected(self, tmp_path) -> None:
+        """Normal .premise files are not treated as locale-specific."""
+        from difficult_dialogs.premises import Premise
+        f = tmp_path / "my_premise.premise"
+        f.write_text("Normal statement.")
+        p = Premise(name="my_premise")
+        p.apply_file(f)
+        assert len(p.statements) == 1
+        assert not p.translations
+
+    def test_apply_file_translations_json(self, tmp_path) -> None:
+        """apply_file loads bulk i18n translations from a .translations.json file."""
+        import json
+        from difficult_dialogs.premises import Premise
+
+        data = {
+            "pt-br": {
+                "statements": ["Computadores processam informação."],
+                "why": ["Porque é verdade."],
+            },
+            "es-ES": {
+                "statements": ["Los ordenadores procesan información."],
+            },
+        }
+        f = tmp_path / "my_premise.translations.json"
+        f.write_text(json.dumps(data))
+        p = Premise(name="my_premise")
+        p.apply_file(f)
+        assert "pt-br" in p.translations
+        assert "Computadores processam informação." in p.translations["pt-br"]["statements"]
+        assert "Porque é verdade." in p.translations["pt-br"]["why"]
+        assert "es-ES" in p.translations
+        assert "Los ordenadores procesan información." in p.translations["es-ES"]["statements"]
+
+    def test_apply_file_translations_json_string_shorthand(self, tmp_path) -> None:
+        """apply_file accepts a plain string value (shorthand for single entry)."""
+        import json
+        from difficult_dialogs.premises import Premise
+
+        data = {"fr": {"statements": "Un seul énoncé."}}
+        f = tmp_path / "p.translations.json"
+        f.write_text(json.dumps(data))
+        p = Premise(name="p")
+        p.apply_file(f)
+        assert "Un seul énoncé." in p.translations["fr"]["statements"]
+
+    def test_apply_file_translations_json_malformed_ignored(self, tmp_path) -> None:
+        """apply_file silently ignores a malformed .translations.json file."""
+        from difficult_dialogs.premises import Premise
+
+        f = tmp_path / "p.translations.json"
+        f.write_text("not valid json{{")
+        p = Premise(name="p")
+        p.apply_file(f)  # must not raise
+        assert not p.translations

@@ -2,13 +2,11 @@
 """Streamlit web demo for Difficult Dialogs.
 
 Run with: streamlit run app.py
-Deploy to Hugging Face Spaces: https://huggingface.co/spaces
 """
 import streamlit as st
 from pathlib import Path
 import sys
 
-# Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from difficult_dialogs import (
@@ -18,280 +16,288 @@ from difficult_dialogs import (
     SocraticPolicy,
     DebatePolicy,
     ExploratoryPolicy,
+    MaieuticPolicy,
+    SkepticPolicy,
+    TeacherPolicy,
+    DebaterPolicy,
+    MinimalistPolicy,
+    AdaptivePolicy,
 )
 
-
-# Page configuration
 st.set_page_config(
-    page_title="Difficult Dialogs - Interactive Demo",
+    page_title="Difficult Dialogs",
     page_icon="💬",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# Custom CSS for better chat appearance
+# CSS that works in both light and dark mode — use currentColor / transparent
+# backgrounds rather than hardcoded hex values.
 st.markdown("""
 <style>
-    .stChatMessage {
-        padding: 1rem;
+    /* Remove hardcoded light backgrounds from chat bubbles */
+    [data-testid="stChatMessage"] {
         border-radius: 0.5rem;
-        margin-bottom: 1rem;
+        margin-bottom: 0.5rem;
+        border: 1px solid rgba(128,128,128,0.15);
     }
-    .stChatMessage[data-testid="stChatMessage"]:nth-child(odd) {
-        background-color: #f0f2f6;
+    /* Assistant bubble: subtle tint using CSS variable so it works in dark mode */
+    [data-testid="stChatMessage"][data-testid*="assistant"],
+    [data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-assistant"]) {
+        background-color: color-mix(in srgb, currentColor 4%, transparent);
     }
-    .policy-selector {
-        background-color: #e8f4f8;
-        padding: 1rem;
+    .finished-banner {
+        padding: 0.75rem 1rem;
         border-radius: 0.5rem;
-        margin-bottom: 1rem;
+        border: 1px solid rgba(0,200,100,0.4);
+        background-color: rgba(0,200,100,0.08);
+        margin-top: 1rem;
     }
 </style>
 """, unsafe_allow_html=True)
 
 
-# Policy mapping
-POLICIES = {
-    "Silent (Presentation)": SilentPolicy,
+# ------------------------------------------------------------------ #
+# Policy registry
+# ------------------------------------------------------------------ #
+
+BASE_POLICIES = {
     "Know-It-All (Evidence)": KnowItAllPolicy,
     "Socratic (Questions)": SocraticPolicy,
     "Debate (Challenger)": DebatePolicy,
     "Exploratory (Neutral)": ExploratoryPolicy,
+    "Maieutic (Discovery)": MaieuticPolicy,
+    "Skeptic (Prove It)": SkepticPolicy,
+    "Teacher (Lesson)": TeacherPolicy,
+    "Debater (Formal)": DebaterPolicy,
+    "Silent (Presentation)": SilentPolicy,
+    "Minimalist (Terse)": MinimalistPolicy,
+    "Adaptive (Auto-switch)": AdaptivePolicy,
 }
 
 POLICY_DESCRIPTIONS = {
-    "Silent (Presentation)": "Presents all statements without waiting for feedback. Best for lectures and presentations.",
-    "Know-It-All (Evidence)": "Provides supporting evidence when you disagree. Best for education and factual topics.",
-    "Socratic (Questions)": "Asks probing questions instead of giving answers. Best for critical thinking and philosophy.",
-    "Debate (Challenger)": "Actively challenges your disagreements. Best for debate practice and testing convictions.",
-    "Exploratory (Neutral)": "Acknowledges multiple viewpoints neutrally. Best for controversial topics.",
+    "Know-It-All (Evidence)":   "Corrects you with evidence when you disagree. Best for education and factual topics.",
+    "Socratic (Questions)":     "Asks probing questions instead of giving answers. Best for critical thinking.",
+    "Debate (Challenger)":      "Actively challenges your position. Best for debate practice.",
+    "Exploratory (Neutral)":    "Presents multiple viewpoints neutrally. Best for controversial topics.",
+    "Maieutic (Discovery)":     "Guides you to discover conclusions yourself.",
+    "Skeptic (Prove It)":       "Doubts everything — you must prove each claim.",
+    "Teacher (Lesson)":         "Structured lesson format with checks for understanding.",
+    "Debater (Formal)":         "Formal debate rules: opening, rounds, closing.",
+    "Silent (Presentation)":    "Presents all statements without waiting for feedback. Good for demos.",
+    "Minimalist (Terse)":       "Brief acknowledgements only — no elaboration.",
+    "Adaptive (Auto-switch)":   "Starts as Know-It-All; switches to Exploratory after 3 disagreements.",
+    "LLM-Enhanced (Rephrase)":  "Wraps Know-It-All and rephrases every bot response via your LLM server.",
 }
 
 
-def load_sample_arguments():
-    """Load available sample arguments."""
-    base_path = Path(__file__).parent.parent / "examples" / "sample_arguments"
-    arguments = {}
-    
-    if not base_path.exists():
-        return arguments
-    
-    for category_dir in sorted(base_path.iterdir()):
-        if not category_dir.is_dir():
+# ------------------------------------------------------------------ #
+# Helpers
+# ------------------------------------------------------------------ #
+
+def load_arguments() -> dict[str, Path]:
+    base = Path(__file__).parent.parent / "examples" / "sample_arguments"
+    result: dict[str, Path] = {}
+    if not base.exists():
+        return result
+    for cat in sorted(base.iterdir()):
+        if not cat.is_dir():
             continue
-        
-        category = category_dir.name
-        for arg_dir in sorted(category_dir.iterdir()):
+        for arg_dir in sorted(cat.iterdir()):
             if arg_dir.is_dir():
-                key = f"{category}/{arg_dir.name}"
-                arguments[key] = arg_dir
-    
-    return arguments
+                result[f"{cat.name}/{arg_dir.name}"] = arg_dir
+    return result
 
 
-def init_session_state():
-    """Initialize Streamlit session state."""
-    if "current_policy" not in st.session_state:
-        st.session_state.current_policy = None
-    if "current_argument" not in st.session_state:
-        st.session_state.current_argument = None
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []
-    if "policy_instance" not in st.session_state:
-        st.session_state.policy_instance = None
-    if "started" not in st.session_state:
-        st.session_state.started = False
+def init_state() -> None:
+    defaults = {
+        "policy_instance": None,
+        "current_argument": None,
+        "current_policy": None,
+        "chat_history": [],
+        "started": False,
+    }
+    for k, v in defaults.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
 
 
-def start_dialog(argument_path: str, policy_name: str):
-    """Start a new dialog with selected argument and policy."""
+def start_dialog(argument_path: Path, policy_name: str, llm_url: str, llm_model: str) -> bool:
     try:
-        # Load argument
-        arg = Argument()
-        arg.load(argument_path)
-        
-        # Create policy
-        policy_class = POLICIES[policy_name]
-        policy = policy_class(arg)
-        
-        # Initialize state
+        arg = Argument.from_directory(str(argument_path))
+
+        if policy_name == "LLM-Enhanced (Rephrase)":
+            from difficult_dialogs.policy import LLMEnhancedPolicy
+            from difficult_dialogs.llm import LLMEnhancer
+            enhancer = LLMEnhancer(llm_url.rstrip("/"), model=llm_model or None)
+            inner = KnowItAllPolicy(arg)
+            policy = LLMEnhancedPolicy(arg, inner, enhancer, style="conversational")
+        elif policy_name == "Adaptive (Auto-switch)":
+            policy = AdaptivePolicy(
+                arg,
+                initial_policy=KnowItAllPolicy(arg),
+                fallback_policy=ExploratoryPolicy(arg),
+                switch_threshold=3,
+            )
+        else:
+            policy = BASE_POLICIES[policy_name](arg)
+
         st.session_state.current_argument = arg
         st.session_state.current_policy = policy_name
         st.session_state.policy_instance = policy
         st.session_state.chat_history = []
         st.session_state.started = True
-        
-        # Add intro message
+
         intro = policy.start()
-        st.session_state.chat_history.append({
-            "role": "assistant",
-            "content": intro,
-        })
-        
+        if intro:
+            st.session_state.chat_history.append({"role": "assistant", "content": intro})
+
         return True
-        
-    except Exception as e:
-        st.error(f"Error loading argument: {e}")
+    except Exception as exc:
+        st.error(f"Error loading argument: {exc}")
         return False
 
 
-def handle_user_input(user_input: str):
-    """Process user input and generate response."""
-    if not st.session_state.policy_instance:
-        return
-    
+def handle_input(user_text: str) -> None:
     policy = st.session_state.policy_instance
-    
-    # Get response from policy
-    response = policy.handle_input(user_input)
-    
-    # Add user message to history
-    st.session_state.chat_history.append({
-        "role": "user",
-        "content": user_input,
-    })
-    
-    # Add bot response if any
+    if not policy:
+        return
+
+    st.session_state.chat_history.append({"role": "user", "content": user_text})
+
+    response = policy.handle_input(user_text)
     if response:
-        st.session_state.chat_history.append({
-            "role": "assistant",
-            "content": response,
-        })
-    
-    # Check if dialog finished
+        st.session_state.chat_history.append({"role": "assistant", "content": response})
+
     if policy.state.finished:
         conclusion = policy.end()
-        if conclusion and conclusion not in [msg["content"] for msg in st.session_state.chat_history]:
+        already = [m["content"] for m in st.session_state.chat_history]
+        if conclusion and conclusion not in already:
             st.session_state.chat_history.append({
                 "role": "assistant",
-                "content": f"\n**Conclusion:** {conclusion}",
+                "content": f"**Conclusion:** {conclusion}",
             })
 
 
-def main():
-    """Main application."""
-    init_session_state()
-    
-    # Header
+# ------------------------------------------------------------------ #
+# Main
+# ------------------------------------------------------------------ #
+
+def main() -> None:
+    init_state()
+
     st.title("💬 Difficult Dialogs")
-    st.markdown("**Interactive argument exploration tool**")
-    
-    # Sidebar for configuration
+    st.caption("Structured argumentation — offline, deterministic, auditable.")
+
+    arguments = load_arguments()
+
+    # ---- Sidebar ----
     with st.sidebar:
-        st.header("Configuration")
-        
-        # Load available arguments
-        arguments = load_sample_arguments()
-        
+        st.header("Setup")
+
         if not arguments:
-            st.error("No sample arguments found!")
-            st.info("Please ensure the examples/sample_arguments directory exists.")
+            st.error("No sample arguments found in examples/sample_arguments/")
             return
-        
-        # Argument selector
-        st.subheader("Select Argument")
-        argument_choice = st.selectbox(
-            "Choose a topic to explore:",
+
+        argument_key = st.selectbox(
+            "Topic",
             options=list(arguments.keys()),
             format_func=lambda x: x.replace("_", " ").title(),
         )
-        
-        # Policy selector
-        st.subheader("Choose Interaction Style")
-        policy_choice = st.selectbox(
-            "How should the AI respond?",
-            options=list(POLICIES.keys()),
-            help="Different policies provide different interaction experiences",
+
+        policy_name = st.selectbox(
+            "Interaction style",
+            options=list(POLICY_DESCRIPTIONS.keys()),
         )
-        
-        # Show policy description
-        st.info(POLICY_DESCRIPTIONS[policy_choice])
-        
-        # Start/restart button
-        col1, col2 = st.columns([2, 1])
+        st.caption(POLICY_DESCRIPTIONS[policy_name])
+
+        # LLM config — only shown when relevant
+        llm_url = ""
+        llm_model = ""
+        if policy_name == "LLM-Enhanced (Rephrase)":
+            with st.expander("LLM server settings", expanded=True):
+                llm_url = st.text_input(
+                    "Server URL",
+                    value="http://localhost:11434",
+                    help="OpenAI-compatible server (Ollama, llama.cpp, etc.)",
+                )
+                llm_model = st.text_input(
+                    "Model name",
+                    value="",
+                    placeholder="leave blank for server default",
+                )
+                st.caption(
+                    "Responses are rephrased via your LLM server. "
+                    "Falls back to original text if unreachable."
+                )
+
+        col1, col2 = st.columns([3, 1])
         with col1:
-            if st.button("🚀 Start New Dialog", use_container_width=True):
-                arg_path = arguments[argument_choice]
-                start_dialog(str(arg_path), policy_choice)
-        
+            start_btn = st.button("▶ Start", use_container_width=True, type="primary")
         with col2:
-            if st.session_state.started:
-                if st.button("🔄 Reset", use_container_width=True):
-                    st.session_state.started = False
-                    st.session_state.chat_history = []
-                    st.session_state.policy_instance = None
-        
-        # Statistics
-        st.divider()
-        st.subheader("Library Stats")
-        st.metric("Available Arguments", len(arguments))
-        st.metric("Categories", len(set(a.split("/")[0] for a in arguments.keys())))
-        st.metric("Policies Available", len(POLICIES))
-        
-        # Info
-        st.divider()
-        st.markdown("""
-### About Difficult Dialogs
+            reset_btn = st.button("↺", use_container_width=True)
 
-A framework for structured argumentation that runs **offline** with **zero dependencies**.
-
-**Key Features:**
-- ✅ File-based argument format
-- ✅ Multiple dialog policies
-- ✅ LLM-powered generation
-- ✅ Works without API calls
-
-[View on GitHub](https://github.com/difficult-dialogs/difficult_dialogs)
-        """)
-    
-    # Main chat area
-    if not st.session_state.started:
-        st.markdown("""
-### 👈 Select an argument and policy to begin!
-
-Use the sidebar to:
-1. **Choose a topic** from our library of 30+ arguments
-2. **Select an interaction style** (policy)
-3. **Click "Start New Dialog"**
-
-Each policy offers a unique experience:
-- **Silent**: One-way presentation
-- **Know-It-All**: Evidence-based persuasion  
-- **Socratic**: Questioning approach
-- **Debate**: Active challenging
-- **Exploratory**: Neutral exploration
-        """)
-        
-        # Show featured arguments
-        st.markdown("### Featured Arguments")
-        
-        featured = [
-            ("technology/artificial_intelligence_will_benefit_humanity", "🤖 AI Benefits"),
-            ("philosophy/i_think_therefore_i_am", "🧠 Cogito Ergo Sum"),
-            ("health/exercise_improves_mental_health", "💪 Exercise & Mental Health"),
-            ("society/universal_basic_income_reduces_poverty", "💰 Universal Basic Income"),
-        ]
-        
-        cols = st.columns(4)
-        for idx, (path, emoji) in enumerate(featured):
-            if path in arguments:
-                with cols[idx % 4]:
-                    st.markdown(f"**{emoji}** {path.split('/')[-1].replace('_', ' ').title()}")
-        
-        return
-    
-    # Display chat history
-    for message in st.session_state.chat_history:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-    
-    # Chat input
-    if st.session_state.policy_instance and not st.session_state.policy_instance.state.finished:
-        if prompt := st.chat_input("Type your response..."):
-            handle_user_input(prompt)
+        if start_btn:
+            start_dialog(arguments[argument_key], policy_name, llm_url, llm_model)
             st.rerun()
-    elif st.session_state.policy_instance and st.session_state.policy_instance.state.finished:
-        st.success("✅ Dialog completed! Choose a new argument or reset to start over.")
+
+        if reset_btn:
+            st.session_state.started = False
+            st.session_state.chat_history = []
+            st.session_state.policy_instance = None
+            st.rerun()
+
+        st.divider()
+        st.metric("Arguments", len(arguments))
+        st.metric("Categories", len({k.split("/")[0] for k in arguments}))
+        st.metric("Policies", len(POLICY_DESCRIPTIONS))
+
+        st.divider()
+        st.markdown(
+            "**difficult_dialogs** — zero-dependency structured debate.\n\n"
+            "[GitHub](https://github.com/TigreGotico/difficult_dialogs) · "
+            "[Docs](https://github.com/TigreGotico/difficult_dialogs/tree/dev/docs)"
+        )
+
+    # ---- Main area ----
+    if not st.session_state.started:
+        st.markdown("### 👈 Choose a topic and interaction style, then click **Start**")
+
+        st.markdown("#### Available interaction styles")
+        cols = st.columns(3)
+        for i, (name, desc) in enumerate(POLICY_DESCRIPTIONS.items()):
+            with cols[i % 3]:
+                st.markdown(f"**{name}**  \n{desc}")
+
+        st.divider()
+        st.markdown("#### Browse topics")
+        categories: dict[str, list[str]] = {}
+        for key in arguments:
+            cat, topic = key.split("/", 1)
+            categories.setdefault(cat, []).append(topic)
+        cat_cols = st.columns(min(len(categories), 3))
+        for i, (cat, topics) in enumerate(sorted(categories.items())):
+            with cat_cols[i % 3]:
+                st.markdown(f"**{cat.replace('_', ' ').title()}**")
+                for t in topics:
+                    st.caption(t.replace("_", " ").title())
+        return
+
+    # Chat history
+    for msg in st.session_state.chat_history:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    policy = st.session_state.policy_instance
+    if policy and not policy.state.finished:
+        if user_input := st.chat_input("Your response…"):
+            handle_input(user_input)
+            st.rerun()
+    elif policy and policy.state.finished:
+        st.markdown(
+            '<div class="finished-banner">✅ Dialog complete — reset or choose a new topic.</div>',
+            unsafe_allow_html=True,
+        )
 
 
 if __name__ == "__main__":

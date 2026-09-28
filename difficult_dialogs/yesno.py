@@ -1,0 +1,217 @@
+"""Fuzzy yes/no detection for dialog input parsing.
+
+Loads a yes/no solver via the ``opm.agents.yesno`` entry-point group.
+Requires ``ovos-plugin-manager`` and at least one yes/no solver plugin
+(e.g. ``ovos-solver-yes-no-plugin``).
+
+Default plugin: ``ovos-solver-yes-no-plugin``
+"""
+from __future__ import annotations
+
+import importlib.metadata
+import logging
+from typing import Protocol, runtime_checkable
+
+logger = logging.getLogger(__name__)
+
+_DEFAULT_PLUGIN = "ovos-yes-no-plugin"
+# entry-point names tried first, in order; the dist ovos-solver-yes-no-plugin
+# registers "ovos-yes-no-plugin" but older releases used the dist name itself
+_PREFERRED_PLUGINS = ("ovos-yes-no-plugin", "ovos-solver-yes-no-plugin")
+_ENTRY_POINT_GROUPS = ("opm.agents.yesno",)
+
+
+# ---------------------------------------------------------------------------
+# Protocol — any object with match_yes_or_no(text, lang) → bool | None
+# ---------------------------------------------------------------------------
+
+@runtime_checkable
+class YesNoSolverProtocol(Protocol):
+    """Minimal interface required by this module."""
+
+    def match_yes_or_no(self, text: str, lang: str) -> bool | None:
+        """Return True (yes), False (no), or None (ambiguous)."""
+        ...
+
+
+# ---------------------------------------------------------------------------
+# Plugin loader
+# ---------------------------------------------------------------------------
+
+class _YesNoEngineAdapter:
+    """Adapt ``YesNoEngine.yes_or_no(question, response, lang)`` plugins to
+    :class:`YesNoSolverProtocol`.
+
+    The ``question`` argument is contextual only; standalone text
+    classification passes an empty question.
+    """
+
+    def __init__(self, engine: object) -> None:
+        self._engine = engine
+
+    def match_yes_or_no(self, text: str, lang: str) -> bool | None:
+        return self._engine.yes_or_no("", text, lang=lang)
+
+
+def _adapt(instance: object) -> YesNoSolverProtocol | None:
+    """Return *instance* as a :class:`YesNoSolverProtocol`, wrapping if needed."""
+    if callable(getattr(instance, "match_yes_or_no", None)):
+        return instance
+    if callable(getattr(instance, "yes_or_no", None)):
+        return _YesNoEngineAdapter(instance)
+    return None
+
+
+def _load_solver(plugin_name: str = _DEFAULT_PLUGIN) -> YesNoSolverProtocol:
+    """Load a yes/no solver from the ``opm.agents.yesno`` entry-point group.
+
+    Tries *plugin_name* first, then the preferred default names, then any
+    other registered plugin.  Supports both the ``match_yes_or_no(text, lang)``
+    protocol and the ``YesNoEngine.yes_or_no(question, response, lang)`` API
+    (wrapped in an adapter).
+
+    Args:
+        plugin_name: Entry-point name to prefer (default: ``ovos-yes-no-plugin``).
+
+    Returns:
+        An instantiated solver satisfying :class:`YesNoSolverProtocol`.
+
+    Raises:
+        RuntimeError: If no compatible plugin can be loaded.
+    """
+    eps: dict[str, importlib.metadata.EntryPoint] = {}
+    for group in _ENTRY_POINT_GROUPS:
+        for ep in importlib.metadata.entry_points(group=group):
+            eps.setdefault(ep.name, ep)  # first group wins on name collision
+
+    seen: set[str] = set()
+    for name in (plugin_name, *_PREFERRED_PLUGINS, *eps.keys()):
+        if name not in eps or name in seen:
+            continue
+        seen.add(name)
+        try:
+            cls = eps[name].load()
+            solver = _adapt(cls())
+            if solver is not None:
+                logger.debug("difficult_dialogs: loaded yes/no solver '%s'", name)
+                return solver
+        except Exception as exc:
+            logger.warning(
+                "difficult_dialogs: failed to load yes/no solver '%s': %s",
+                name, exc,
+            )
+
+    raise RuntimeError(
+        f"No usable yes/no plugin found in {_ENTRY_POINT_GROUPS}. "
+        f"Install the default: pip install ovos-solver-yes-no-plugin. "
+        f"Available: {list(eps)}"
+    )
+
+
+# Module-level singleton — loaded once on first use
+_solver: YesNoSolverProtocol | None = None
+_yesno_plugin: str = _DEFAULT_PLUGIN
+
+
+def _get_solver() -> YesNoSolverProtocol:
+    global _solver
+    if _solver is None:
+        _solver = _load_solver(_yesno_plugin)
+    return _solver
+
+
+def set_solver(solver: YesNoSolverProtocol) -> None:
+    """Replace the active yes/no solver at runtime.
+
+    Args:
+        solver: Any object implementing ``match_yes_or_no(text, lang)``.
+
+    Example::
+
+        from difficult_dialogs.yesno import set_solver
+        from ovos_yes_no import HeuristicYesNoEngine
+        set_solver(_YesNoEngineAdapter(HeuristicYesNoEngine()))
+    """
+    global _solver
+    _solver = solver
+
+
+def configure(yesno_plugin: str = _DEFAULT_PLUGIN) -> None:
+    """Choose which ``opm.agents.yesno`` plugin to use.
+
+    Must be called before the first ``parse_yes_no`` call (or after
+    ``set_solver(None)`` to force a reload).
+
+    Args:
+        yesno_plugin: Entry-point name, e.g. ``"ovos-solver-yes-no-plugin"``.
+    """
+    global _yesno_plugin, _solver
+    _yesno_plugin = yesno_plugin
+    _solver = None  # force reload on next use
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+def list_solvers() -> dict[str, str]:
+    """Return a mapping of entry-point name → entry-point value for all registered yes/no solvers.
+
+    Returns:
+        Dict of ``{name: dotted.path.ClassName}`` for every plugin found in
+        :data:`_ENTRY_POINT_GROUPS`.  Returns an empty dict when none are installed.
+
+    Example::
+
+        from difficult_dialogs.yesno import list_solvers
+        print(list_solvers())
+        # {'ovos-solver-yes-no-plugin': 'ovos_yes_no_solver:YesNoSolver'}
+    """
+    import importlib.metadata as _meta
+
+    result: dict[str, str] = {}
+    for group in _ENTRY_POINT_GROUPS:
+        for ep in _meta.entry_points(group=group):
+            result.setdefault(ep.name, ep.value)
+    return result
+
+
+def parse_yes_no(text: str, lang: str = "en-US") -> bool | None:
+    """Parse natural-language text as agreement, disagreement, or neither.
+
+    Delegates to the active ``opm.agents.yesno`` plugin.
+
+    Args:
+        text: Raw user input string.
+        lang: BCP-47 language code (e.g. ``"en-US"``, ``"pt-BR"``).
+
+    Returns:
+        ``True``  — user agrees / yes.
+        ``False`` — user disagrees / no.
+        ``None``  — neutral / ambiguous; caller decides.
+    """
+    return _get_solver().match_yes_or_no(text, lang)
+
+
+def is_agreement(text: str, lang: str = "en-US", default: bool = True) -> bool:
+    """Return ``True`` if *text* expresses agreement.
+
+    Args:
+        text: Raw user input.
+        lang: BCP-47 language code.
+        default: Value returned when intent is ambiguous.
+    """
+    result = parse_yes_no(text, lang)
+    return default if result is None else result
+
+
+def is_disagreement(text: str, lang: str = "en-US", default: bool = False) -> bool:
+    """Return ``True`` if *text* expresses disagreement.
+
+    Args:
+        text: Raw user input.
+        lang: BCP-47 language code.
+        default: Value returned when intent is ambiguous.
+    """
+    result = parse_yes_no(text, lang)
+    return default if result is None else not result

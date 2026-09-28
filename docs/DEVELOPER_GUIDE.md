@@ -1,6 +1,6 @@
 # Difficult Dialogs - Developer API Reference
 
-**Version:** 0.4.0  
+**Version:** 0.5.0
 **For:** Python developers building on Difficult Dialogs
 
 ---
@@ -53,16 +53,29 @@
 ```
 difficult_dialogs/
 ├── __init__.py          # Public API exports
+├── version.py           # OVOS version block + __version__
 ├── statements.py        # Statement dataclass
-├── premises.py         # Premise dataclass
-├── arguments.py        # Argument class + file I/O
-├── policy.py           # Policy ABC + implementations
-├── exceptions.py       # Custom exceptions
+├── premises.py          # Premise dataclass (Six Ws: what/why/how/when/where/who)
+├── arguments.py         # Argument class + file I/O + merge()
+├── builder.py           # ArgumentBuilder / PremiseBuilder fluent API
+├── policy.py            # BasePolicy ABC + 10 concrete policies + AdaptivePolicy
+│                        # + WebhookPolicy + MultiArgumentPolicy
+├── library.py           # ArgumentLibrary: keyword search over argument dirs
+├── validators.py        # Argument validation utilities
+├── cli.py               # CLI entry point (did / difficult-dialogs)
+├── server.py            # FastAPI REST server
+├── exceptions.py        # Custom exceptions
+├── export/
+│   ├── __init__.py
+│   ├── json.py          # JSON export
+│   ├── sqlite.py        # SQLite export
+│   ├── markdown.py      # Markdown export
+│   └── transcript.py    # Session transcript export (Markdown + JSON)
 └── llm/
     ├── __init__.py
-    ├── client.py       # HTTP client for LLM APIs
-    ├── generator.py    # Argument generation
-    └── enhancer.py     # Runtime enhancement
+    ├── client.py        # HTTP client for OpenAI-compatible LLM APIs
+    ├── generator.py     # Argument generation from topic string
+    └── enhancer.py      # Runtime statement rephrasing
 ```
 
 ---
@@ -159,6 +172,7 @@ class Premise:
         how (list[str]): "How" explanations.
         when (list[str]): Timing context.
         where (list[str]): Location context.
+        who (list[str]): "Who" context (who is affected / authorities).
     """
     
     @property
@@ -192,7 +206,10 @@ class Premise:
     
     def add_where(self, text: str) -> Premise:
         """Add location context."""
-    
+
+    def add_who(self, text: str) -> Premise:
+        """Add "who" context (who is affected / authorities)."""
+
     def get_next_statement(self, cache: set[str]) -> Statement | None:
         """Get next unspoken statement."""
     
@@ -240,7 +257,7 @@ premise2 = Premise.from_dict(data)
 
 ### Argument
 
-A complete debate with intro, conclusion, and premises.
+A complete debate, made up of an intro, a conclusion, and one or more premises.
 
 ```python
 from difficult_dialogs import Argument
@@ -335,6 +352,78 @@ with open("argument.json", "w") as f:
 
 arg2 = Argument.from_dict(data)
 ```
+
+---
+
+### ArgumentBuilder
+
+Fluent API for programmatic argument construction: `builder.py`.
+
+```python
+from difficult_dialogs.builder import ArgumentBuilder
+```
+
+#### Usage
+
+```python
+from difficult_dialogs.builder import ArgumentBuilder
+
+arg = (
+    ArgumentBuilder("climate_change")
+    .intro("Let's discuss climate change.")
+    .conclusion("The evidence is clear.")
+    .premise("human_causation")
+        .statement("97% of climate scientists agree.")
+        .support("See IPCC AR6.")
+        .source("https://www.ipcc.ch/")
+        .why("CO₂ traps heat in the atmosphere.")
+        .who("Climate scientists and IPCC working groups.")
+        .done()
+    .build()
+)
+```
+
+| Method | Returns | Notes |
+|---|---|---|
+| `ArgumentBuilder(name)` | `ArgumentBuilder` | Start building |
+| `.intro(text)` | `ArgumentBuilder` | Set opening statement |
+| `.conclusion(text)` | `ArgumentBuilder` | Set closing statement |
+| `.premise(name)` | `PremiseBuilder` | Begin a premise sub-builder |
+| `.add_premise(p)` | `ArgumentBuilder` | Attach a pre-built `Premise` |
+| `.build()` | `Argument` | Finish and return |
+| `PremiseBuilder.statement(text)` | `PremiseBuilder` | Add a core claim |
+| `PremiseBuilder.support(text)` | `PremiseBuilder` | Add a comeback |
+| `PremiseBuilder.source(url)` | `PremiseBuilder` | Add a citation |
+| `PremiseBuilder.what/why/how/when/where/who(text)` | `PremiseBuilder` | Six-Ws fields |
+| `PremiseBuilder.done()` | `ArgumentBuilder` | Return to parent builder |
+
+---
+
+### ArgumentLibrary
+
+Keyword search index over a directory of arguments: `library.py`.
+
+```python
+from difficult_dialogs.library import ArgumentLibrary, SearchResult
+```
+
+#### Usage
+
+```python
+lib = ArgumentLibrary("arguments/").scan()
+
+results: list[SearchResult] = lib.search("climate change", limit=5)
+for r in results:
+    print(r.argument.name, r.score)
+
+# By category (top-level subdirectory name)
+health_args = lib.by_category("health")
+
+# Direct access
+arg = lib.get("regular_exercise_improves_mental_health")
+```
+
+`ArgumentLibrary.scan()` (`library.py`) walks subdirectories, loads each `Argument`, and builds an in-memory index. Pass `reload=True` to rescan.
 
 ---
 
@@ -483,7 +572,7 @@ arg = gen.generate(
     language="en"
 )
 
-# Save to disk — Argument.save() writes the full subdirectory structure
+# Save to disk: Argument.save() writes the full subdirectory structure
 arg.save("arguments/ubi_poverty")
 print(f"Generated argument with {len(arg.premises)} premises")
 ```
@@ -582,6 +671,57 @@ enhancer.clear_cache()  # Clear cached rephrasings
 
 ---
 
+### LLMEnhancedPolicy
+
+Wraps any existing policy and rephrases its bot responses via `LLMEnhancer`: `policy.py`.
+
+```python
+from difficult_dialogs.policy import LLMEnhancedPolicy, KnowItAllPolicy
+from difficult_dialogs.llm import LLMEnhancer
+```
+
+#### API
+
+```python
+LLMEnhancedPolicy(
+    argument: Argument,
+    inner_policy: BasePolicy,
+    enhancer: LLMEnhancer,
+    style: str = "conversational",  # "conversational" | "formal" | "friendly" | "academic"
+)
+```
+
+All dialog logic (premise sequencing, agreement tracking, support delivery) is handled by the `inner_policy`. `LLMEnhancedPolicy` intercepts each bot response and calls `enhancer.rephrase(text, style=style)`. If the enhancer fails for any reason (server down, timeout, exception), the original text is returned unchanged.
+
+#### Usage
+
+```python
+from difficult_dialogs import Argument
+from difficult_dialogs.policy import LLMEnhancedPolicy, KnowItAllPolicy
+from difficult_dialogs.llm import LLMEnhancer
+
+arg = Argument.from_directory("arguments/climate_change")
+inner = KnowItAllPolicy(arg)
+enhancer = LLMEnhancer("http://localhost:8000", model="qwen-7b")
+
+policy = LLMEnhancedPolicy(arg, inner, enhancer, style="friendly")
+
+print(policy.start())
+
+gen = policy.run_sync()
+response = next(gen)
+while response:
+    print("BOT:", response)
+    try:
+        response = gen.send(input("USER: "))
+    except StopIteration:
+        break
+```
+
+The session transcript records enhanced (rephrased) text, not the originals.
+
+---
+
 ## Policy System
 
 ### BasePolicy
@@ -610,10 +750,10 @@ class BasePolicy(ABC):
     
     def start(self) -> str:
         """Start dialog, return intro."""
-    
+
     def end(self) -> str:
-        """End dialog, return conclusion."""
-    
+        """End dialog, set finished=True, return conclusion."""
+
     def agree(self) -> None:
         """Mark current premise as agreed."""
     
@@ -717,9 +857,19 @@ arg.load(Path("arguments/lecture"))
 
 policy = SilentPolicy(arg)
 
-for statement in policy.run_sync():
-    print(statement)
+while not policy.state.finished:
+    response = policy.handle_input("")
+    if response:
+        print(response)
 ```
+
+### AdaptivePolicy, WebhookPolicy, MultiArgumentPolicy
+
+See [POLICIES.md](POLICIES.md) for full documentation of these meta-policies.
+
+- `AdaptivePolicy`: switches from one inner policy to another after N consecutive disagreements
+- `WebhookPolicy`: forwards turns to an HTTP endpoint with local fallback
+- `MultiArgumentPolicy`: chains multiple `Argument` objects into one session, advancing automatically
 
 ---
 
@@ -748,19 +898,16 @@ async def stream_dialog(policy: BasePolicy) -> AsyncGenerator[str, None]:
 
 ```python
 from difficult_dialogs.arguments import Argument
-from FileNotFoundError import FileNotFoundError
+from difficult_dialogs.exceptions import ArgumentLoadError
 
 arg = Argument()
 
 try:
     arg.load("/nonexistent/path")
-except FileNotFoundError as e:
-    print(f"Path not found: {e}")
-except ValueError as e:
-    print(f"Invalid path: {e}")
+except ArgumentLoadError as e:
+    print(f"Could not load argument: {e}")
 
 from difficult_dialogs.llm.generator import ArgumentGenerator
-from difficult_dialogs.llm.client import URLError
 
 gen = ArgumentGenerator("http://invalid-url:8000")
 
@@ -799,13 +946,13 @@ def test_argument_creation():
 def test_argument_loading():
     arg = Argument()
     arg.load(Path("examples/i_think_therefore_i_am"))
-    
+
     assert arg.is_complete
     assert len(arg.premises) > 0
 
 def test_policy_dialog():
     arg = Argument()
-    arg.load(Path("examples/test_argument"))
+    arg.load(Path("examples/i_think_therefore_i_am"))
     
     policy = KnowItAllPolicy(arg)
     intro = policy.start()
@@ -816,18 +963,16 @@ def test_policy_dialog():
     response = policy.handle_input("yes")
     assert response is not None
 
-@pytest.mark.asyncio
-async def test_async_policy():
+def test_sync_policy():
     arg = Argument()
-    arg.load(Path("examples/test_argument"))
-    
+    arg.load(Path("examples/i_think_therefore_i_am"))
+
     policy = KnowItAllPolicy(arg)
-    
-    responses = []
-    async for response in policy.run_async():
-        responses.append(response)
-    
-    assert len(responses) > 0
+    policy.start()
+
+    gen = policy.run_sync()
+    response = next(gen)
+    assert response is not None
 ```
 
 ---
@@ -838,24 +983,20 @@ async def test_async_policy():
 
 ```bash
 # Clone repository
-git clone https://github.com/JarbasAl/difficult_dialogs
+git clone https://github.com/TigreGotico/difficult_dialogs
 cd difficult_dialogs
 
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate
-
 # Install dev dependencies
-pip install -e ".[dev]"
+uv pip install -e ".[dev]"
 
 # Run tests
-pytest test/ -v
+uv run pytest test/ -v
 
 # Type checking
-mypy difficult_dialogs/ --strict
+uv run mypy difficult_dialogs/
 
 # Linting
-ruff check difficult_dialogs/ test/
+uv run ruff check difficult_dialogs/ test/
 ```
 
 ### Code Style
@@ -888,7 +1029,8 @@ Use GitHub Issues with:
 
 - **Documentation:** `/docs/` directory
 - **API Reference:** This document
-- **Issues:** https://github.com/JarbasAl/difficult_dialogs/issues
-- **Discussions:** https://github.com/JarbasAl/difficult_dialogs/discussions
+- **Issues:** [github.com/TigreGotico/difficult_dialogs/issues](https://github.com/TigreGotico/difficult_dialogs/issues)
+- **Discussions:** [github.com/TigreGotico/difficult_dialogs/discussions](https://github.com/TigreGotico/difficult_dialogs/discussions)
 
-Happy coding!
+---
+[← User stories](USER_STORIES.md) · [Home](index.md)

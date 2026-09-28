@@ -730,3 +730,254 @@ def test_all_policies_handle_disagreement() -> None:
         # Each policy should respond to disagreement in its own way
         response = policy.handle_input("no")
         assert response is not None, f"{policy.__class__.__name__} returned None on disagreement"
+
+
+# ---------------------------------------------------------------------------
+# Transcript
+# ---------------------------------------------------------------------------
+
+def test_transcript_populated_by_start() -> None:
+    """start() records a bot entry in the transcript."""
+    policy = KnowItAllPolicy(make_arg())
+    policy.start()
+    assert len(policy.state.transcript) == 1
+    assert policy.state.transcript[0].role == "bot"
+
+
+def test_transcript_populated_by_respond() -> None:
+    """respond() records user + bot entries."""
+    policy = KnowItAllPolicy(make_arg())
+    policy.start()
+    policy.respond("yes")
+    # start() added 1, respond() adds user + bot = 3 total (or 2 if bot is None)
+    assert any(e.role == "user" for e in policy.state.transcript)
+
+
+def test_transcript_populated_by_end() -> None:
+    """end() records a bot entry for the conclusion."""
+    policy = KnowItAllPolicy(make_arg())
+    policy.start()
+    policy.end()
+    roles = [e.role for e in policy.state.transcript]
+    assert roles.count("bot") >= 2  # intro + conclusion
+
+
+def test_transcript_reset_on_start() -> None:
+    """Calling start() again clears the previous transcript."""
+    policy = KnowItAllPolicy(make_arg())
+    policy.start()
+    policy.respond("yes")
+    policy.start()  # reset
+    assert len(policy.state.transcript) == 1  # only new intro
+
+
+def test_run_sync_populates_transcript() -> None:
+    """run_sync() records both user and bot turns."""
+    policy = KnowItAllPolicy(make_arg())
+    gen = policy.run_sync()
+    next(gen)                    # bot intro
+    try:
+        gen.send("yes")          # user turn → bot response
+    except StopIteration:
+        pass
+    user_turns = [e for e in policy.state.transcript if e.role == "user"]
+    assert len(user_turns) >= 1
+
+
+# ---------------------------------------------------------------------------
+# PolicyState serialization
+# ---------------------------------------------------------------------------
+
+def test_policy_state_round_trip() -> None:
+    """PolicyState.to_dict() / from_dict() preserves all fields."""
+    from difficult_dialogs.policy import TranscriptEntry
+    state = PolicyState(
+        spoken_premises={"p1", "p2"},
+        spoken_statements={"s1"},
+        current_premise="p2",
+        user_agrees=False,
+        finished=False,
+        challenge_count=2,
+        transcript=[TranscriptEntry(role="bot", text="Hello")],
+    )
+    restored = PolicyState.from_dict(state.to_dict())
+    assert restored.spoken_premises == state.spoken_premises
+    assert restored.spoken_statements == state.spoken_statements
+    assert restored.current_premise == state.current_premise
+    assert restored.user_agrees == state.user_agrees
+    assert restored.finished == state.finished
+    assert restored.challenge_count == state.challenge_count
+    assert len(restored.transcript) == 1
+    assert restored.transcript[0].role == "bot"
+    assert restored.transcript[0].text == "Hello"
+
+
+def test_policy_state_empty_round_trip() -> None:
+    """Default PolicyState survives to_dict/from_dict."""
+    state = PolicyState()
+    restored = PolicyState.from_dict(state.to_dict())
+    assert restored.spoken_premises == set()
+    assert restored.finished is False
+    assert restored.transcript == []
+
+
+def test_restore_state_from_dict() -> None:
+    """restore_state() accepts raw dict and resumes conversation."""
+    policy = KnowItAllPolicy(make_arg())
+    policy.start()
+    policy.respond("yes")
+    snapshot = policy.state.to_dict()
+
+    # New policy instance — restore from snapshot
+    policy2 = KnowItAllPolicy(make_arg())
+    policy2.restore_state(snapshot)
+    assert policy2.state.spoken_premises == policy.state.spoken_premises
+    assert len(policy2.state.transcript) == len(policy.state.transcript)
+
+
+def test_restore_state_from_policy_state() -> None:
+    """restore_state() also accepts a PolicyState object directly."""
+    policy = KnowItAllPolicy(make_arg())
+    policy.start()
+    state_obj = policy.state
+
+    policy2 = KnowItAllPolicy(make_arg())
+    policy2.restore_state(state_obj)
+    assert policy2.state is state_obj
+
+
+def test_transcript_entry_round_trip() -> None:
+    """TranscriptEntry.to_dict/from_dict preserves role and text."""
+    from difficult_dialogs.policy import TranscriptEntry
+    entry = TranscriptEntry(role="user", text="Hello world")
+    restored = TranscriptEntry.from_dict(entry.to_dict())
+    assert restored.role == "user"
+    assert restored.text == "Hello world"
+
+
+# ---------------------------------------------------------------------------
+# save_state / load_state
+# ---------------------------------------------------------------------------
+
+def test_save_and_load_state_round_trip(tmp_path) -> None:
+    """save_state/load_state preserves spoken premises and transcript."""
+    policy = KnowItAllPolicy(make_arg())
+    policy.start()
+    policy.respond("yes")
+    path = tmp_path / "session.json"
+    policy.save_state(path)
+
+    policy2 = KnowItAllPolicy(make_arg())
+    policy2.load_state(path)
+    assert policy2.state.spoken_premises == policy.state.spoken_premises
+    assert len(policy2.state.transcript) == len(policy.state.transcript)
+    assert policy2.state.finished == policy.state.finished
+
+
+def test_save_state_creates_valid_json(tmp_path) -> None:
+    """save_state writes valid JSON."""
+    import json
+    policy = KnowItAllPolicy(make_arg())
+    policy.start()
+    path = tmp_path / "state.json"
+    policy.save_state(path)
+    data = json.loads(path.read_text())
+    assert "spoken_premises" in data
+    assert "transcript" in data
+
+
+# ---------------------------------------------------------------------------
+# AdaptivePolicy.set_policy
+# ---------------------------------------------------------------------------
+
+def test_adaptive_set_policy_transfers_state() -> None:
+    """set_policy transfers transcript and spoken_premises to new delegate."""
+    from difficult_dialogs.policy import AdaptivePolicy, SocraticPolicy
+    arg = make_arg()
+    policy = AdaptivePolicy(arg)
+    policy.start()
+    policy.respond("yes")
+
+    original_transcript_len = len(policy.state.transcript)
+    original_spoken = set(policy.state.spoken_premises)
+
+    policy.set_policy(SocraticPolicy(arg))
+    # State must be preserved after the switch
+    assert len(policy.state.transcript) == original_transcript_len
+    assert policy.state.spoken_premises == original_spoken
+    assert isinstance(policy.active_policy, SocraticPolicy)
+
+
+def test_adaptive_set_policy_active_policy_property() -> None:
+    """active_policy reflects new policy after set_policy."""
+    from difficult_dialogs.policy import AdaptivePolicy, TeacherPolicy
+    arg = make_arg()
+    policy = AdaptivePolicy(arg)
+    policy.start()
+    new = TeacherPolicy(arg)
+    policy.set_policy(new)
+    assert policy.active_policy is new
+
+
+# ---------------------------------------------------------------------------
+# lang parameter threading
+# ---------------------------------------------------------------------------
+
+def test_lang_stored_on_policy() -> None:
+    """lang kwarg is stored on BasePolicy and defaults to en-US."""
+    policy = KnowItAllPolicy(make_arg())
+    assert policy.lang == "en-US"
+
+
+def test_lang_custom_value_propagates() -> None:
+    """Explicit lang value is stored."""
+    policy = KnowItAllPolicy(make_arg(), lang="es-ES")
+    assert policy.lang == "es-ES"
+
+
+def test_adaptive_lang_propagates_to_delegate() -> None:
+    """AdaptivePolicy passes lang to initial delegate on start()."""
+    from difficult_dialogs.policy import AdaptivePolicy
+    arg = make_arg()
+    policy = AdaptivePolicy(arg, lang="pt-BR")
+    policy.start()
+    assert policy.active_policy.lang == "pt-BR"
+
+
+def test_lang_passed_to_parse_yes_no(monkeypatch) -> None:
+    """handle_input passes policy.lang to parse_yes_no."""
+    import difficult_dialogs.yesno as yesno_module
+    captured: list[str] = []
+    original = yesno_module.parse_yes_no
+
+    def spy(text: str, lang: str = "en-US") -> object:
+        captured.append(lang)
+        return original(text, lang)
+
+    monkeypatch.setattr(yesno_module, "parse_yes_no", spy)
+
+    policy = KnowItAllPolicy(make_arg(), lang="fr-FR")
+    policy.start()
+    policy.respond("oui")
+    assert "fr-FR" in captured
+
+
+# ---------------------------------------------------------------------------
+# Plugin registry / get_policy kwargs
+# ---------------------------------------------------------------------------
+
+def test_get_policy_accepts_lang_kwarg() -> None:
+    """get_policy forwards kwargs to the policy constructor."""
+    from difficult_dialogs.policy import get_policy
+    policy = get_policy("knowitall", make_arg(), lang="de-DE")
+    assert policy.lang == "de-DE"
+
+
+def test_policy_registry_contains_builtins() -> None:
+    """POLICY_REGISTRY contains all expected built-in policy names."""
+    from difficult_dialogs.policy import POLICY_REGISTRY
+    expected = {
+        "knowitall", "silent", "socratic", "debate", "exploratory",
+        "maieutic", "skeptic", "teacher", "debater", "minimalist", "adaptive",
+    }
+    assert expected <= set(POLICY_REGISTRY.keys())
