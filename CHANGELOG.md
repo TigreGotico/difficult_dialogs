@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.1a4](https://github.com/TigreGotico/difficult_dialogs/tree/0.6.1a4) (2026-09-28)
+
+[Full Changelog](https://github.com/TigreGotico/difficult_dialogs/compare/0.6.1a3...0.6.1a4)
+
+**Merged pull requests:**
+
+- Update dependency pytest to v9.0.3 \[SECURITY\] [\#9](https://github.com/TigreGotico/difficult_dialogs/pull/9) ([renovate[bot]](https://github.com/apps/renovate))
+
 ## [0.6.1a3](https://github.com/TigreGotico/difficult_dialogs/tree/0.6.1a3) (2026-09-28)
 
 [Full Changelog](https://github.com/TigreGotico/difficult_dialogs/compare/0.6.1a2...0.6.1a3)
