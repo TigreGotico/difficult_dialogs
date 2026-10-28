@@ -1,0 +1,3 @@
+Linus's Law states that 'given enough eyeballs, all bugs are shallow' — open source code is reviewed by thousands of independent developers, creating adversarial security testing at no additional cost.
+The OpenSSL Heartbleed vulnerability (2014) was serious — but was identified and patched in days precisely because the code was public; a proprietary equivalent could have gone undetected for years.
+The NSA's backdoor in RSA encryption (revealed 2013) was possible because the code was proprietary; open source implementations would have exposed it to public scrutiny sooner.

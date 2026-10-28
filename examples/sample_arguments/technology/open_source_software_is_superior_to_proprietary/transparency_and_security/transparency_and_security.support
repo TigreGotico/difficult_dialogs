@@ -1,0 +1,3 @@
+Security by obscurity has been repeatedly shown to fail — determined attackers obtain proprietary source code regardless, while defenders cannot audit what they cannot see.
+Google Project Zero consistently finds more unpatched vulnerabilities in proprietary software (Windows, iOS) than in open source equivalents with comparable user bases.
+Government cybersecurity agencies (UK NCSC, US CISA) increasingly recommend open source for critical systems specifically because of auditability.

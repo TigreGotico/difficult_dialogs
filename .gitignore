@@ -179,3 +179,10 @@ pyvenv.cfg
 .venv
 pip-selfcheck.json
 
+
+# local planning files
+TODO.md
+ROADMAP.md
+*,cover
+.generation_checkpoint.json
+generation_log.txt

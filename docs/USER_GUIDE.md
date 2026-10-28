@@ -1,7 +1,7 @@
 # Difficult Dialogs - Complete User Guide
 
-**Version:** 0.4.0  
-**Last Updated:** 2026-03-30
+**Version:** 0.5.0
+**Last Updated:** 2026-03-31
 
 ---
 
@@ -33,7 +33,7 @@ Difficult Dialogs is a framework for creating **portable, deterministic debate b
 
 ### When to Use This
 
-✅ **Good use cases:**
+**Good use cases:**
 - Educational debate tutors
 - Patient education in healthcare
 - Customer support FAQs
@@ -41,7 +41,7 @@ Difficult Dialogs is a framework for creating **portable, deterministic debate b
 - Offline/edge deployment
 - High-volume applications (1000s of users/day)
 
-❌ **Not suitable for:**
+**Not suitable for:**
 - Open-ended conversations
 - Topics requiring real-time information
 - Highly personalized interactions
@@ -89,9 +89,9 @@ pip install difficult-dialogs
 ### Install from Source
 
 ```bash
-git clone https://github.com/JarbasAl/difficult_dialogs
+git clone https://github.com/TigreGotico/difficult_dialogs
 cd difficult_dialogs
-pip install -e .
+uv pip install -e .
 ```
 
 ### Verify Installation
@@ -146,7 +146,7 @@ BOT: Studies show that remote workers report fewer distractions and higher job s
 Do you agree? (y/n)
 ```
 
-**That's it!** You've created and run a debate bot in 5 minutes.
+You have now created and run a debate bot in five minutes.
 
 ---
 
@@ -338,7 +338,7 @@ argument = gen.generate(
     language="en"                    # Language code
 )
 
-# Save to disk — Argument.save() handles all file naming automatically
+# Save to disk: Argument.save() handles all file naming automatically
 argument.save("arguments/ev_better")
 print(f"Generated argument saved to arguments/ev_better")
 ```
@@ -357,8 +357,8 @@ print(f"Generated argument saved to arguments/ev_better")
 ### Tips for Better Generation
 
 1. **Be specific with topics:**
-   - ❌ "Climate change"
-   - ✅ "Carbon taxes effectively reduce emissions"
+   - Too broad: "Climate change"
+   - Specific: "Carbon taxes effectively reduce emissions"
 
 2. **Choose appropriate depth:**
    - Depth 1: Simple FAQ (2-3 premises)
@@ -531,6 +531,58 @@ async def on_message(message):
 
 bot.run('YOUR_DISCORD_TOKEN')
 ```
+
+#### Async / Streaming Integration
+
+`BasePolicy.stream()` is an async generator that accepts an
+`AsyncGenerator[str, None]` of user messages and yields bot responses one by
+one.  Use it when your framework is already async (FastAPI WebSocket, aiohttp,
+Discord.py, etc.) and you don't want to run a synchronous `input()` loop.
+
+```python
+import asyncio
+from difficult_dialogs import Argument, get_policy
+
+arg = Argument.from_directory("examples/i_think_therefore_i_am")
+policy = get_policy("socratic", arg)
+
+async def user_input_stream():
+    """Yield pre-scripted turns: replace with real input in production."""
+    for turn in ["I think so", "not sure", "yes"]:
+        yield turn
+
+async def main():
+    print("BOT:", policy.start())
+    async for response in policy.stream(user_input_stream()):
+        if response:
+            print("BOT:", response)
+
+asyncio.run(main())
+```
+
+`stream()` handles its own `start()` / `end()` bookkeeping: it yields the
+intro before the first user message and the conclusion once
+`policy.state.finished` is set.
+
+**Session persistence with async**: save state between requests using
+`policy.save_state(path)` / `policy.load_state(path)` (`BasePolicy`:
+`policy.py`):
+
+```python
+# Request 1
+policy = get_policy("knowitall", arg)
+policy.start()
+await do_one_turn(policy)
+policy.save_state("/tmp/session_42.json")
+
+# Request 2 (new process / worker)
+policy2 = get_policy("knowitall", arg)
+policy2.load_state("/tmp/session_42.json")
+await do_one_turn(policy2)
+```
+
+For key-value stores (Redis, DynamoDB): use `policy.state.to_dict()` and
+`policy.restore_state(d)` directly.
 
 ---
 
@@ -825,8 +877,8 @@ policy.start()  # Resets the cache
 ### Getting Help
 
 - **Documentation:** `/docs/` directory
-- **Issues:** https://github.com/JarbasAl/difficult_dialogs/issues
-- **Discussions:** https://github.com/JarbasAl/difficult_dialogs/discussions
+- **Issues:** [github.com/TigreGotico/difficult_dialogs/issues](https://github.com/TigreGotico/difficult_dialogs/issues)
+- **Discussions:** [github.com/TigreGotico/difficult_dialogs/discussions](https://github.com/TigreGotico/difficult_dialogs/discussions)
 
 ---
 
@@ -909,7 +961,7 @@ languages = ["en", "es", "fr", "de", "zh"]
 
 for lang in languages:
     arg = gen.generate(
-        topic="Exercise improves mental health",
+        topic="Regular exercise improves mental health",
         language=lang
     )
     arg.save(f"arguments/exercise_mental_{lang}")
@@ -948,8 +1000,8 @@ arg_b.save("arguments/charity_logical")
 Now that you've mastered the basics:
 
 1. **Read the Developer Guide** (`docs/DEVELOPER_GUIDE.md`) for API details
-2. **Study the Whitepaper** (`WHITEPAPER.md`) for architecture and use cases
-3. **Explore Examples** (`examples/` directory) for working code
-4. **Join Discussions** on GitHub to share your use cases
+2. **Explore Examples** (`examples/` directory) for working code
+3. **Join Discussions** on GitHub to share your use cases
 
-Happy debating!
+---
+[← Graphs](GRAPHS.md) · [Home](index.md) · [User stories →](USER_STORIES.md)

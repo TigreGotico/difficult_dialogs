@@ -16,9 +16,19 @@ Zero external runtime dependencies. Pure Python 3.10+.
 | `BasePolicy` | `policy.py` | Abstract base for dialog loops: presents statements, collects feedback, advances premises. |
 | `PolicyState` | `policy.py` | Serializable session state (spoken premises/statements, challenge count, finished flag). |
 
-10 concrete policies ship in `policy.py`: `KnowItAllPolicy`, `SilentPolicy`, `SocraticPolicy`,
-`DebatePolicy`, `ExploratoryPolicy`, `MaieuticPolicy`, `SkepticPolicy`, `TeacherPolicy`,
-`DebaterPolicy`, `MinimalistPolicy`.
+`policy.py` ships 16 concrete policies, including `KnowItAllPolicy`, `SilentPolicy`,
+`SocraticPolicy`, `DebatePolicy`, `ExploratoryPolicy`, `MaieuticPolicy`, `SkepticPolicy`,
+`TeacherPolicy`, `DebaterPolicy`, `MinimalistPolicy`, `AdaptivePolicy`, and `MultiChoicePolicy`.
+See [POLICIES.md](POLICIES.md) for the full list.
+
+`AdaptivePolicy`: switches from an initial policy to a fallback after N consecutive disagreements.
+`MultiChoicePolicy`: presents labelled A/B/C menus when a premise has a `.choices` file.
+
+`ArgumentBuilder` / `PremiseBuilder` (`builder.py`): a fluent Python API for constructing
+arguments programmatically without touching the file format.
+
+`ChoiceSolverProtocol` (`choices.py`): a pluggable matcher for multiple-choice input, defaults
+to offline label/prefix matching, upgrades to BM25 if `ovos-solver-bm25-plugin` is installed.
 
 ## File format
 
@@ -36,7 +46,8 @@ my_argument/
     ├── premise_name.why
     ├── premise_name.how
     ├── premise_name.when
-    └── premise_name.where
+    ├── premise_name.where
+    └── premise_name.who
 ```
 
 ## Quick start
@@ -49,10 +60,15 @@ arg = Argument.from_directory("path/to/my_argument")
 policy = KnowItAllPolicy(arg)
 
 print(policy.start())
-for response in policy.run_sync():
+
+gen = policy.run_sync()
+response = next(gen)
+while response:
     print("BOT:", response)
-    user_input = input("USER: ")
-    policy.run_sync().send(user_input)
+    try:
+        response = gen.send(input("USER: "))
+    except StopIteration:
+        break
 ```
 
 ## Export
@@ -67,7 +83,12 @@ diff = arg.diff(updated_arg)           # {meta, added_premises, removed_premises
 
 ## Navigation
 
-- [argument-format.md](argument-format.md) — full file format reference
-- [USER_GUIDE.md](USER_GUIDE.md) — end-user manual
-- [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md) — API reference
-- [POLICIES.md](POLICIES.md) — policy reference
+- [argument-format.md](argument-format.md): full file format reference (`.premise`, `.choices`, `.on_agree`, `.translations.json`, …)
+- [POLICIES.md](POLICIES.md): policy reference (all built-in policies, plus custom policies)
+- [builder.md](builder.md): Python API: `ArgumentBuilder`, `Argument.from_directory()`, `validate_argument()`
+- [choice-solver.md](choice-solver.md): OPM choice solver, offline matcher, `set_solver()`
+- [cli.md](cli.md): CLI reference (`did graph`, `did stats`, `did debate`, `did diff`, …)
+- [GRAPHS.md](GRAPHS.md): Mermaid premise graphs for all sample arguments
+- [USER_GUIDE.md](USER_GUIDE.md): end-user manual
+- [USER_STORIES.md](USER_STORIES.md): developer-perspective use cases with API paths
+- [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md): developer and integration guide

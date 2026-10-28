@@ -196,8 +196,13 @@ def cmd_export(args: argparse.Namespace) -> int:
                 print(f"  Avg validation score: {stats['validation']['average_score']:.2f}")
         
         db.close()
+    elif format_type == "csv":
+        from difficult_dialogs.export.csv import export_library_to_csv
+        result_path = export_library_to_csv(input_path, output_path)
+        print(f"✓ Exported to {result_path}")
+
     else:
-        print(f"❌ Error: Unknown format '{format_type}'. Use 'json' or 'sqlite'.")
+        print(f"❌ Error: Unknown format '{format_type}'. Use 'json', 'sqlite', or 'csv'.")
         return 1
     
     return 0
@@ -214,17 +219,72 @@ def cmd_debate(args: argparse.Namespace) -> int:
         print(f"❌ Error: Argument not found: {arg_path}")
         return 1
 
-    # Load argument
+    # Load argument (with optional --watch hot-reload)
+    def _load() -> "Argument":
+        return Argument().load(arg_path)
+
     try:
-        argument = Argument().load(arg_path)
+        argument = _load()
     except Exception as e:
         print(f"❌ Error loading argument: {e}")
         return 1
+
+    if getattr(args, "watch", False):
+        import threading
+        _reload_lock = threading.Lock()
+        _current: list = [argument]
+
+        def _reload(_event: object = None) -> None:
+            try:
+                new_arg = _load()
+                with _reload_lock:
+                    _current[0] = new_arg
+                print("\n[watch] Argument reloaded.")
+            except Exception as exc:
+                print(f"\n[watch] Reload failed: {exc}")
+
+        try:
+            from watchdog.observers import Observer
+            from watchdog.events import FileSystemEventHandler
+
+            class _Handler(FileSystemEventHandler):
+                def on_any_event(self, event) -> None:  # type: ignore[override]
+                    if not event.is_directory:
+                        _reload()
+
+            observer = Observer()
+            observer.schedule(_Handler(), str(arg_path), recursive=True)
+            observer.daemon = True  # type: ignore[attr-defined]
+            observer.start()
+        except ImportError:
+            import time
+            def _poll() -> None:
+                last_mtime = sum(
+                    p.stat().st_mtime for p in arg_path.rglob("*") if p.is_file()
+                )
+                while True:
+                    time.sleep(1.0)
+                    try:
+                        mtime = sum(
+                            p.stat().st_mtime for p in arg_path.rglob("*") if p.is_file()
+                        )
+                    except OSError:
+                        continue
+                    if mtime != last_mtime:
+                        last_mtime = mtime
+                        _reload()
+
+            threading.Thread(target=_poll, daemon=True).start()
+
+        # Wrap argument so policy always uses the freshest version
+        argument = _current[0]
 
     policy_name = args.policy or "knowitall"
 
     print(f"ARGUMENT: {argument.name}")
     print(f"POLICY:   {policy_name}")
+    if getattr(args, "watch", False):
+        print(f"[watch]   Watching {arg_path} for changes")
     print("=" * 60)
     print()
 
@@ -239,29 +299,213 @@ def cmd_debate(args: argparse.Namespace) -> int:
     print(f"BOT: {policy.start()}")
     print()
     
+    # Prepare input source
+    input_lines: list[str] | None = None
+    if getattr(args, "input_file", None):
+        try:
+            input_lines = Path(args.input_file).read_text().splitlines()
+        except OSError as e:
+            print(f"❌ Error reading input file: {e}")
+            return 1
+
+    def _next_input(prompt: str) -> str:
+        if input_lines:
+            line = input_lines.pop(0) if input_lines else ""
+            print(f"{prompt}{line}")
+            return line
+        return input(prompt)
+
     # Interactive loop
     try:
-        while True:
-            user_input = input("USER: ").strip().lower()
-            
-            if user_input in ['quit', 'exit', 'q']:
+        while not policy.state.finished:
+            user_input = _next_input("USER: ").strip()
+
+            if user_input.lower() in ('quit', 'exit', 'q'):
                 print(f"\nBOT: {policy.end()}")
                 break
-            
-            response = policy.handle_input(user_input)
-            
+
+            response = policy.respond(user_input)
+
             if response:
                 print(f"BOT: {response}")
-                
-                # Check if done
-                next_stmt = policy._get_next_statement()
-                if next_stmt is None and not policy.state.finished:
-                    print(f"\nBOT: {policy.end()}")
-                    break
-                    
+
+            if policy.state.finished:
+                print(f"\nBOT: {policy.end()}")
+                break
+
     except EOFError:
         print(f"\n\nBOT: {policy.end()}")
-    
+
+    # Optional transcript save
+    if getattr(args, "save_transcript", None):
+        from difficult_dialogs.export import export_transcript_to_markdown
+        out = Path(args.save_transcript)
+        export_transcript_to_markdown(policy, output_path=out)
+        print(f"\nTranscript saved to {out}")
+
+    return 0
+
+
+def cmd_score(args: argparse.Namespace) -> int:
+    """Print a one-line quality score for an argument directory."""
+    from difficult_dialogs.arguments import Argument
+    from difficult_dialogs.validators import ArgumentValidator
+
+    path = Path(args.argument)
+    if not path.exists():
+        print(f"❌ Error: Argument not found: {path}")
+        return 1
+
+    try:
+        argument = Argument.from_directory(path)
+    except Exception as exc:
+        print(f"❌ Error loading argument: {exc}")
+        return 1
+
+    result = ArgumentValidator().validate(argument)
+    label = "EXCELLENT" if result.score >= 0.9 else (
+        "GOOD" if result.score >= 0.7 else (
+            "FAIR" if result.score >= 0.5 else "POOR"
+        )
+    )
+    icon = "✅" if result.passed else "❌"
+    print(f"{icon} {argument.name}: {result.score:.0%}  [{label}]")
+    if not result.passed:
+        from difficult_dialogs.validators import ValidationSeverity
+        for issue in result.issues:
+            if issue.severity in (ValidationSeverity.ERROR, ValidationSeverity.CRITICAL):
+                print(f"   {issue.severity.name}: {issue.message}")
+    return 0 if result.passed else 2
+
+
+def cmd_replay(args: argparse.Namespace) -> int:
+    """Replay a saved session transcript non-interactively."""
+    import json
+
+    path = Path(args.transcript)
+    if not path.exists():
+        print(f"❌ Error: Transcript file not found: {path}")
+        return 1
+
+    try:
+        raw = json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError) as exc:
+        print(f"❌ Error reading transcript: {exc}")
+        return 1
+
+    # Accept both formats: list of entries OR full state dict
+    if isinstance(raw, list):
+        entries = raw
+    elif isinstance(raw, dict) and "transcript" in raw:
+        entries = raw["transcript"]
+    else:
+        print("❌ Unrecognised transcript format. Expected a list or a state dict with 'transcript' key.")
+        return 1
+
+    if not entries:
+        print("(empty transcript)")
+        return 0
+
+    for entry in entries:
+        role = entry.get("role", "?")
+        text = entry.get("text", "")
+        if role == "bot":
+            print(f"BOT:  {text}")
+        else:
+            print(f"USER: {text}")
+
+    return 0
+
+
+def cmd_diff(args: argparse.Namespace) -> int:
+    """Show a human-readable diff between two argument directories."""
+    from difficult_dialogs.arguments import Argument
+
+    path_a = Path(args.argument_a)
+    path_b = Path(args.argument_b)
+
+    for p in (path_a, path_b):
+        if not p.exists():
+            print(f"❌ Error: Path not found: {p}")
+            return 1
+
+    try:
+        arg_a = Argument.from_directory(path_a)
+        arg_b = Argument.from_directory(path_b)
+    except Exception as exc:
+        print(f"❌ Error loading argument: {exc}")
+        return 1
+
+    diff = arg_a.diff(arg_b)
+
+    has_changes = diff["meta"] or diff["added_premises"] or diff["removed_premises"] or diff["modified_premises"]
+    if not has_changes:
+        print("✅ Arguments are identical.")
+        return 0
+
+    if diff["meta"]:
+        print("META CHANGES:")
+        for field, (old, new) in diff["meta"].items():
+            print(f"  {field}:")
+            print(f"    - {old!r}")
+            print(f"    + {new!r}")
+        print()
+
+    if diff["added_premises"]:
+        print("ADDED PREMISES:")
+        for name in diff["added_premises"]:
+            print(f"  + {name}")
+        print()
+
+    if diff["removed_premises"]:
+        print("REMOVED PREMISES:")
+        for name in diff["removed_premises"]:
+            print(f"  - {name}")
+        print()
+
+    if diff["modified_premises"]:
+        print("MODIFIED PREMISES:")
+        for name, changes in diff["modified_premises"].items():
+            print(f"  ~ {name}:")
+            for stmt in changes.get("added_statements", []):
+                print(f"      + {stmt!r}")
+            for stmt in changes.get("removed_statements", []):
+                print(f"      - {stmt!r}")
+        print()
+
+    return 0
+
+
+def cmd_solvers(args: argparse.Namespace) -> int:
+    """List available yes/no and choice solver plugins."""
+    from difficult_dialogs.yesno import list_solvers as list_yesno_solvers
+    from difficult_dialogs.choices import list_solvers as list_choice_solvers
+
+    yesno = list_yesno_solvers()
+    choices = list_choice_solvers()
+
+    if not yesno and not choices:
+        print("No solver plugins found.")
+        print("  Yes/no:  pip install ovos-solver-yes-no-plugin")
+        print("  Choice:  pip install ovos-solver-bm25-plugin")
+        print("\nBuilt-in fallback solvers are active for both.")
+        return 0
+
+    print("YES/NO SOLVERS:")
+    if yesno:
+        for name, value in sorted(yesno.items()):
+            print(f"  {name}  ({value})")
+    else:
+        print("  (none — built-in regex fallback active)")
+    print()
+
+    print("CHOICE SOLVERS:")
+    if choices:
+        for name, value in sorted(choices.items()):
+            print(f"  {name}  ({value})")
+    else:
+        print("  (none — built-in label matcher active)")
+
     return 0
 
 
@@ -301,6 +545,214 @@ def cmd_list(args: argparse.Namespace) -> int:
         print()
     
     print(f"Total: {count} arguments")
+    return 0
+
+
+def cmd_serve(args: argparse.Namespace) -> int:
+    """Start the example FastAPI REST server (examples/server.py)."""
+    try:
+        import uvicorn
+    except ImportError:
+        print("❌ uvicorn is required to run the server.")
+        print("   Install with: pip install fastapi uvicorn")
+        return 1
+
+    import importlib.util, sys
+    from pathlib import Path
+
+    # Locate examples/server.py relative to this file or cwd
+    candidates = [
+        Path(__file__).parent.parent / "examples" / "server.py",
+        Path("examples") / "server.py",
+    ]
+    server_path = next((p for p in candidates if p.exists()), None)
+    if server_path is None:
+        print("❌ examples/server.py not found. Run from the repo root or install the package.")
+        return 1
+
+    spec = importlib.util.spec_from_file_location("_dd_server", server_path)
+    module = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+    spec.loader.exec_module(module)  # type: ignore[union-attr]
+
+    print(f"🚀 Starting Difficult Dialogs API server on http://{args.host}:{args.port}")
+    print("   Press Ctrl+C to stop.\n")
+
+    uvicorn.run(module.app, host=args.host, port=args.port, reload=False)
+    return 0
+
+
+def cmd_graph(args: argparse.Namespace) -> int:
+    """Render the premise graph of an argument."""
+    from difficult_dialogs.arguments import Argument
+    from difficult_dialogs.export.graph import to_mermaid, to_dot, to_graph_json
+    import json as _json
+
+    arg_path = Path(args.argument)
+    if not arg_path.exists():
+        print(f"❌ Error: Argument not found: {arg_path}")
+        return 1
+
+    try:
+        argument = Argument.from_directory(arg_path)
+    except Exception as exc:
+        print(f"❌ Error loading argument: {exc}")
+        return 1
+
+    graph = argument.to_graph()
+    fmt = getattr(args, "format", "mermaid")
+
+    if fmt == "dot":
+        output = to_dot(graph)
+    elif fmt == "json":
+        output = _json.dumps(to_graph_json(graph), indent=2)
+    else:
+        output = to_mermaid(graph)
+
+    if getattr(args, "output", None):
+        Path(args.output).write_text(output)
+        print(f"✓ Graph written to {args.output}")
+    else:
+        print(output, end="")
+
+    return 0
+
+
+def cmd_stats(args: argparse.Namespace) -> int:
+    """Print structural statistics for an argument or library."""
+    from difficult_dialogs.arguments import Argument
+
+    path = Path(args.path)
+    if not path.exists():
+        print(f"❌ Error: Path not found: {path}")
+        return 1
+
+    # Collect arguments: single arg or library root
+    arg_dirs: list[Path] = []
+    if (path / "intro.dialog").exists():
+        arg_dirs.append(path)
+    else:
+        for intro in path.rglob("intro.dialog"):
+            arg_dirs.append(intro.parent)
+
+    if not arg_dirs:
+        print("No arguments found.")
+        return 1
+
+    total_premises = 0
+    total_statements = 0
+    total_edges = 0
+    total_choices = 0
+    total_languages: set[str] = set()
+    max_depth = 0
+
+    for d in arg_dirs:
+        try:
+            arg = Argument.from_directory(d)
+        except Exception:
+            continue
+
+        graph = arg.to_graph()
+        total_premises += len(graph.nodes)
+        total_statements += sum(n.statement_count for n in graph.nodes)
+        explicit = [e for e in graph.edges if not e.is_linear_fallback]
+        total_edges += len(explicit)
+        total_choices += sum(1 for n in graph.nodes if n.has_choices)
+
+        # Max depth via BFS
+        if graph.nodes:
+            adj: dict[str, list[str]] = {}
+            for e in graph.edges:
+                adj.setdefault(e.source, []).append(e.target)
+            start = graph.entry_point or graph.nodes[0].name
+            visited: set[str] = set()
+            queue = [(start, 1)]
+            local_max = 0
+            while queue:
+                node, depth = queue.pop(0)
+                if node in visited:
+                    continue
+                visited.add(node)
+                local_max = max(local_max, depth)
+                for neighbour in adj.get(node, []):
+                    if neighbour not in visited:
+                        queue.append((neighbour, depth + 1))
+            max_depth = max(max_depth, local_max)
+
+        # Count translation languages
+        for premise in arg.premises:
+            if hasattr(premise, "translations") and premise.translations:
+                total_languages.update(premise.translations.keys())
+
+    branching_factor = f"{total_edges / total_premises:.1f}" if total_premises else "0"
+
+    print(f"Arguments:    {len(arg_dirs)}")
+    print(f"Premises:     {total_premises}")
+    print(f"Statements:   {total_statements}")
+    print(f"Edges:        {total_edges} (explicit)")
+    print(f"Max depth:    {max_depth}")
+    print(f"Branching:    {branching_factor} edges/premise")
+    print(f"Choices:      {total_choices} premises with choices")
+    if total_languages:
+        print(f"Languages:    {len(total_languages)} ({', '.join(sorted(total_languages))})")
+    else:
+        print(f"Languages:    0")
+
+    return 0
+
+
+def cmd_new(args: argparse.Namespace) -> int:
+    """Interactive wizard to create a new argument without an LLM."""
+    from difficult_dialogs.builder import ArgumentBuilder
+
+    print("=== New Argument Wizard ===")
+    print("Press Ctrl+C at any time to abort.\n")
+
+    try:
+        name = input("Argument name (e.g. 'exercise improves mental health'): ").strip()
+        if not name:
+            print("❌ Name is required.")
+            return 1
+
+        intro = input("Opening statement / intro: ").strip()
+        conclusion = input("Conclusion (what you want the user to accept): ").strip()
+
+        builder = ArgumentBuilder(name=name).intro(intro).conclusion(conclusion)
+
+        print("\nNow add premises. Each premise is one key reason that supports your conclusion.")
+        print("Enter an empty premise name to finish.\n")
+
+        premise_idx = 1
+        while True:
+            pname = input(f"  Premise {premise_idx} name (or ENTER to finish): ").strip()
+            if not pname:
+                break
+
+            pb = builder.premise(pname)
+
+            print(f"  Add supporting statements for '{pname}'. Empty line to move on.")
+            stmt_idx = 1
+            while True:
+                stmt = input(f"    Statement {stmt_idx}: ").strip()
+                if not stmt:
+                    break
+                pb.statement(stmt)
+                stmt_idx += 1
+
+            premise_idx += 1
+
+        if premise_idx == 1:
+            print("⚠  No premises added — argument will have only intro and conclusion.")
+
+        arg = builder.build()
+        out_dir = Path(args.output) / name.lower().replace(" ", "_").replace("'", "")[:60]
+        arg.save(out_dir)
+        print(f"\n✓ Argument saved to {out_dir}")
+        print(f"  Debate it with: dd debate {out_dir}")
+
+    except KeyboardInterrupt:
+        print("\nAborted.")
+        return 1
+
     return 0
 
 
@@ -412,7 +864,7 @@ def main() -> int:
     )
     exp_parser.add_argument(
         "-f", "--format",
-        choices=["json", "sqlite", "db"],
+        choices=["json", "sqlite", "db", "csv"],
         help="Export format (auto-detected from extension if not specified)"
     )
     exp_parser.add_argument(
@@ -443,11 +895,117 @@ def main() -> int:
         choices=[
             "knowitall", "silent", "socratic", "debate", "exploratory",
             "maieutic", "skeptic", "teacher", "debater", "minimalist",
+            "adaptive", "cooperative",
         ],
         help="Dialog policy to use (default: knowitall)"
     )
+    deb_parser.add_argument(
+        "--save-transcript",
+        metavar="FILE",
+        help="Save the conversation transcript to a Markdown file after the session ends",
+    )
+    deb_parser.add_argument(
+        "--input-file",
+        metavar="FILE",
+        help="Read user turns from a file (one per line) instead of stdin — useful for scripting and CI",
+    )
+    deb_parser.add_argument(
+        "--watch",
+        action="store_true",
+        help="Watch the argument directory for file changes and reload without restarting the session",
+    )
     deb_parser.set_defaults(func=cmd_debate)
     
+    # New command
+    new_parser = subparsers.add_parser(
+        "new",
+        aliases=["create", "n"],
+        help="Create a new argument interactively (no LLM required)",
+    )
+    new_parser.add_argument(
+        "-o", "--output",
+        default=".",
+        metavar="DIR",
+        help="Directory to save the argument in (default: current dir)",
+    )
+    new_parser.set_defaults(func=cmd_new)
+
+    # Score command
+    score_parser = subparsers.add_parser(
+        "score",
+        aliases=["sc"],
+        help="Print a one-line quality score for an argument directory",
+    )
+    score_parser.add_argument(
+        "argument",
+        help="Path to argument directory",
+    )
+    score_parser.set_defaults(func=cmd_score)
+
+    # Replay command
+    replay_parser = subparsers.add_parser(
+        "replay",
+        aliases=["rp"],
+        help="Replay a saved session transcript non-interactively",
+    )
+    replay_parser.add_argument(
+        "transcript",
+        help="Path to a JSON transcript file (saved by --save-transcript or export_transcript_to_json)",
+    )
+    replay_parser.set_defaults(func=cmd_replay)
+
+    # Diff command
+    diff_parser = subparsers.add_parser(
+        "diff",
+        help="Show a human-readable diff between two argument directories",
+    )
+    diff_parser.add_argument("argument_a", help="Path to first argument directory (base)")
+    diff_parser.add_argument("argument_b", help="Path to second argument directory (comparison)")
+    diff_parser.set_defaults(func=cmd_diff)
+
+    # Graph command
+    graph_parser = subparsers.add_parser(
+        "graph",
+        aliases=["gr"],
+        help="Render the premise graph of an argument (Mermaid, DOT, or JSON)",
+    )
+    graph_parser.add_argument(
+        "argument",
+        help="Path to argument directory",
+    )
+    graph_parser.add_argument(
+        "-f", "--format",
+        choices=["mermaid", "dot", "json"],
+        default="mermaid",
+        help="Output format (default: mermaid)",
+    )
+    graph_parser.add_argument(
+        "-o", "--output",
+        metavar="FILE",
+        help="Write output to file instead of stdout",
+    )
+    graph_parser.set_defaults(func=cmd_graph)
+
+    # Stats command
+    stats_parser = subparsers.add_parser(
+        "stats",
+        aliases=["st"],
+        help="Print structural statistics for an argument or library",
+    )
+    stats_parser.add_argument(
+        "path",
+        help="Path to argument directory or library root",
+    )
+    stats_parser.set_defaults(func=cmd_stats)
+
+    # Solvers command
+    solvers_parser = subparsers.add_parser(
+        "solvers",
+        aliases=["solver"],
+        help="List available yes/no solver plugins",
+    )
+    solvers_parser.set_defaults(func=cmd_solvers)
+
     # List command
     list_parser = subparsers.add_parser(
         "list",
@@ -461,7 +1019,31 @@ def main() -> int:
         help="Path to search (default: ./examples/sample_arguments)"
     )
     list_parser.set_defaults(func=cmd_list)
-    
+
+    # Serve command
+    serve_parser = subparsers.add_parser(
+        "serve",
+        aliases=["server", "api"],
+        help="Start the FastAPI REST server"
+    )
+    serve_parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Host to bind to (default: 127.0.0.1)"
+    )
+    serve_parser.add_argument(
+        "--port",
+        type=int,
+        default=8080,
+        help="Port to listen on (default: 8080)"
+    )
+    serve_parser.add_argument(
+        "--reload",
+        action="store_true",
+        help="Enable auto-reload for development"
+    )
+    serve_parser.set_defaults(func=cmd_serve)
+
     # Parse arguments
     args = parser.parse_args()
     

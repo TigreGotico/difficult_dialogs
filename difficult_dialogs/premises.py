@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from difficult_dialogs.choices import ChoiceOption, parse_choices_file
 from difficult_dialogs.statements import Statement
 
 
@@ -40,6 +41,11 @@ class Premise:
     how: list[str] = field(default_factory=list)
     when: list[str] = field(default_factory=list)
     where: list[str] = field(default_factory=list)
+    who: list[str] = field(default_factory=list)
+    translations: dict[str, dict[str, list[str]]] = field(default_factory=dict)
+    choices: list[ChoiceOption] = field(default_factory=list)
+    on_agree: str | None = None
+    on_disagree: str | None = None
     
     def __post_init__(self) -> None:
         """Set description from name if not provided."""
@@ -123,7 +129,40 @@ class Premise:
         if text not in self.where:
             self.where.append(text)
         return self
-    
+
+    def add_who(self, text: str) -> Premise:
+        """Add information about who is affected or who the authorities are."""
+        if text not in self.who:
+            self.who.append(text)
+        return self
+
+    def add_choice(
+        self,
+        text: str,
+        outcome: str = "agree",
+        next_premise: str | None = None,
+        label: str | None = None,
+    ) -> Premise:
+        """Append a multiple-choice option to this premise.
+
+        Args:
+            text: Human-readable option description.
+            outcome: Semantic outcome — ``"agree"``, ``"disagree"``,
+                ``"clarify"``, or ``"skip"``.
+            next_premise: Optional name of the premise to jump to when
+                this option is selected.
+            label: Short label (e.g. ``"A"``).  Auto-assigned from
+                ``A``, ``B``, ``C``… if omitted.
+
+        Returns:
+            Self for method chaining.
+        """
+        auto_labels = list("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+        if label is None:
+            label = auto_labels[len(self.choices)] if len(self.choices) < len(auto_labels) else str(len(self.choices) + 1)
+        self.choices.append(ChoiceOption(label=label, text=text, outcome=outcome, next_premise=next_premise))
+        return self
+
     def apply_file(self, file: Path) -> None:
         """Apply the contents of a plain-text file to the appropriate field.
 
@@ -132,8 +171,10 @@ class Premise:
         extensions are silently ignored.
 
         Args:
-            file: Path to a plain-text premise data file whose extension
-                  determines the target field (e.g. ``.premise``, ``.why``).
+            file: Path to a premise data file whose extension determines the
+                  target field (e.g. ``.premise``, ``.why``).  Files named
+                  ``<name>.translations.json`` are loaded as bulk i18n
+                  translations (format: ``{lang: {field: [lines]}}``).
         """
         content = file.read_text()
         lines = [ln.strip() for ln in content.strip().split("\n") if ln.strip()]
@@ -147,11 +188,95 @@ class Premise:
             ".how":     self.add_how,
             ".when":    self.add_when,
             ".where":   self.add_where,
+            ".who":     self.add_who,
         }
+
+        # .translations.json — bulk i18n translations for all fields and languages.
+        # Format: {"<lang>": {"<field>": ["line1", "line2", …], …}, …}
+        # The filename must match <stem>.translations.json where stem matches
+        # the premise name (case-insensitive) — or any .translations.json file
+        # inside the premise directory.
+        if file.name.endswith(".translations.json"):
+            import json as _json
+            try:
+                data: dict[str, dict[str, list[str]]] = _json.loads(content)
+            except _json.JSONDecodeError:
+                return  # silently ignore malformed JSON
+            for lang, fields in data.items():
+                for field_name, texts in fields.items():
+                    if isinstance(texts, list):
+                        for text in texts:
+                            self.add_translation(lang, field_name, str(text))
+                    else:
+                        # Allow a plain string as shorthand for a single entry
+                        self.add_translation(lang, field_name, str(texts))
+            return
+
+        # .choices — multi-choice options; parse whole file at once
+        if file.suffix == ".choices":
+            for opt in parse_choices_file(content):
+                self.choices.append(opt)
+            return
+
+        # .on_agree / .on_disagree — single line, the name of the next premise
+        if file.suffix == ".on_agree":
+            if lines:
+                self.on_agree = lines[0]
+            return
+        if file.suffix == ".on_disagree":
+            if lines:
+                self.on_disagree = lines[0]
+            return
+
+        # Check for locale-specific file: name.es-ES.premise → lang="es-ES", field="premise"
+        # Filename pattern: <stem>.<lang-code>.<field>  where lang contains a hyphen
+        parts = file.name.split(".")
+        if len(parts) >= 3 and "-" in parts[-2]:
+            lang_code = parts[-2]
+            field_ext = "." + parts[-1]
+            if field_ext in _DISPATCH:
+                field_name = parts[-1]
+                for line in lines:
+                    self.add_translation(lang_code, field_name, line)
+                return
+
         adder = _DISPATCH.get(file.suffix)
         if adder is not None:
             for line in lines:
                 adder(line)
+
+    def add_translation(self, lang: str, field: str, text: str) -> Premise:
+        """Add a translated string for a specific field and language.
+
+        Translations are keyed by BCP-47 language code (e.g. ``"es-ES"``) and
+        field name (``"statements"``, ``"support"``, ``"what"``, …).
+
+        Args:
+            lang: BCP-47 language code.
+            field: Target field name (e.g. ``"statements"``, ``"why"``).
+            text: Translated text to store.
+
+        Returns:
+            Self for method chaining.
+        """
+        self.translations.setdefault(lang, {}).setdefault(field, []).append(text)
+        return self
+
+    def get_statements(self, lang: str | None = None) -> list[str]:
+        """Return statement texts, preferring *lang* translations when available.
+
+        Args:
+            lang: BCP-47 language code.  Falls back to the default (English)
+                  statements when no translation exists for *lang*.
+
+        Returns:
+            List of statement text strings.
+        """
+        if lang and lang in self.translations:
+            translated = self.translations[lang].get("statements")
+            if translated:
+                return list(translated)
+        return [s.text for s in self.statements]
 
     def get_next_statement(self, cache: set[str]) -> Statement | None:
         """Get the next unspoken statement.
@@ -183,7 +308,7 @@ class Premise:
     
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary representation."""
-        return {
+        d: dict[str, Any] = {
             "name": self.name,
             "description": self.description,
             "statements": [s.text for s in self.statements],
@@ -194,8 +319,21 @@ class Premise:
             "how": self.how.copy(),
             "when": self.when.copy(),
             "where": self.where.copy(),
+            "who": self.who.copy(),
             "is_true": self.is_true,
         }
+        if self.translations:
+            d["translations"] = {
+                lang: {field: list(texts) for field, texts in fields.items()}
+                for lang, fields in self.translations.items()
+            }
+        if self.choices:
+            d["choices"] = [c.to_dict() for c in self.choices]
+        if self.on_agree is not None:
+            d["on_agree"] = self.on_agree
+        if self.on_disagree is not None:
+            d["on_disagree"] = self.on_disagree
+        return d
     
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Premise:
@@ -235,7 +373,21 @@ class Premise:
         
         for text in data.get("where", []):
             premise.add_where(text)
-        
+
+        for text in data.get("who", []):
+            premise.add_who(text)
+
+        for lang, fields in data.get("translations", {}).items():
+            for field_name, texts in fields.items():
+                for text in texts:
+                    premise.add_translation(lang, field_name, text)
+
+        for choice_data in data.get("choices", []):
+            premise.choices.append(ChoiceOption.from_dict(choice_data))
+
+        premise.on_agree = data.get("on_agree") or None
+        premise.on_disagree = data.get("on_disagree") or None
+
         return premise
     
     def __bool__(self) -> bool:
