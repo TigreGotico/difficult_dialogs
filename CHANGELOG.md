@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.1a5](https://github.com/TigreGotico/difficult_dialogs/tree/0.6.1a5) (2026-10-28)
+
+[Full Changelog](https://github.com/TigreGotico/difficult_dialogs/compare/0.6.1a4...0.6.1a5)
+
+**Merged pull requests:**
+
+- ci: drop the install\_extras input that names an extra this package lacks [\#35](https://github.com/TigreGotico/difficult_dialogs/pull/35) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [0.6.1a4](https://github.com/TigreGotico/difficult_dialogs/tree/0.6.1a4) (2026-09-28)
 
 [Full Changelog](https://github.com/TigreGotico/difficult_dialogs/compare/0.6.1a3...0.6.1a4)
